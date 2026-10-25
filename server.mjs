@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 const root = resolve(fileURLToPath(new URL('./dist/', import.meta.url)));
+const port = Number(process.argv[2] || 4173);
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.mjs': 'text/javascript', '.json': 'application/json', '.svg': 'image/svg+xml' };
 createServer(async (req, res) => {
   try {
@@ -12,4 +13,4 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
     res.end(await readFile(file));
   } catch { res.writeHead(404); res.end('Not found'); }
-}).listen(4173, '127.0.0.1', () => console.log('Local: http://127.0.0.1:4173'));
+}).listen(port, '127.0.0.1', () => console.log(`Local: http://127.0.0.1:${port}`));
