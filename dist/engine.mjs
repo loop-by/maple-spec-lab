@@ -32,10 +32,11 @@ export const EFFECTS = [
   ...['STR','DEX','INT','LUK'].flatMap(stat=>[[stat.toLowerCase(),`${stat} (고정)`],[stat.toLowerCase()+'Percent',`${stat} %`]]),
   ['attackSpeed','공격 속도 % (기록)'],['cooldown','재사용 대기시간 감소 % (기록)'],
   ['hp','최대 HP (기록)'],['hpPercent','최대 HP % (기록)'],['mp','최대 MP (기록)'],['mpPercent','최대 MP % (기록)'],
-  ['defense','방어력 (기록)'],['defensePercent','방어력 % (기록)'],['accuracy','명중 (기록)'],['evade','회피 (기록)'],['itemAttack','장비 공격력 고정값 (기록)']
+  ['defense','방어력 (기록)'],['defensePercent','방어력 % (기록)'],['accuracy','명중 (기록)'],['evade','회피 (기록)'],['itemAttack','장비 공격력 고정값 (실측 환산)'],
+  ...Array.from({length:5},(_,i)=>[`skillLevel${i+1}`,`${i+1}차 스킬 레벨 (실측 환산)`])
 ];
 const attributeTypes=new Set(['str','dex','int','luk','strPercent','dexPercent','intPercent','lukPercent']);
-const recordTypes=new Set(['attackSpeed','cooldown','hp','hpPercent','mp','mpPercent','defense','defensePercent','accuracy','evade','itemAttack']);
+const recordTypes=new Set(['attackSpeed','cooldown','hp','hpPercent','mp','mpPercent','defense','defensePercent','accuracy','evade','itemAttack',...Array.from({length:5},(_,i)=>`skillLevel${i+1}`)]);
 const additive = new Set(EFFECTS.map(([k])=>k).filter(k=>!['none','finalDamage','penetration','mainFlat','mainPercent','attackPercent'].includes(k)&&!attributeTypes.has(k)&&!recordTypes.has(k)));
 export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export function validateStats(s) {
@@ -87,10 +88,14 @@ export function replaceLines(snapshot, oldLines, newLines, calibration={}) {
     for(const {type,value} of lines) {
       if(!Number.isFinite(value)||value<0) throw new Error('옵션 수치는 0 이상의 유한수여야 합니다.');
       if(type==='none'||value===0) continue;
-      if(recordTypes.has(type))throw Error(`${EFFECTS.find(([k])=>k===type)?.[1]} 변경은 현재 1회 피해 모델에서 계산하지 않습니다.`);
+      if(recordTypes.has(type)){
+        const c=calibration[type];
+        if((type==='itemAttack'||type.startsWith('skillLevel'))&&c&&Number.isFinite(c.attack)&&Number.isFinite(c.statDamage)){result.attack+=sign*value*c.attack;result.statDamage+=sign*value*c.statDamage;continue;}
+        throw Error(`${EFFECTS.find(([k])=>k===type)?.[1]} 변경은 ${type==='itemAttack'||type.startsWith('skillLevel')?'실측 환산값을 먼저 입력하세요.':'현재 1회 피해 모델에서 계산하지 않습니다.'}`);
+      }
       if(attributeTypes.has(type)) {
         const percent=type.endsWith('Percent'),stat=type.replace('Percent','').toUpperCase();
-        const c=calibration.mainAttribute===stat?calibration[percent?'mainPercent':'mainFlat']:calibration[type];
+        const c=calibration[type]??(calibration.mainAttribute===stat?calibration[percent?'mainPercent':'mainFlat']:undefined);
         if(!c||!Number.isFinite(c.attack)||!Number.isFinite(c.statDamage))throw Error(calibration.mainAttribute===stat?`${stat}${percent?' %':''}의 실측 환산값을 내 스펙에서 입력하세요.`:`${stat}${percent?' %':''}의 별도 실측 환산이 없어 변경 효율을 계산할 수 없습니다.`);
         result.attack+=sign*value*c.attack;result.statDamage+=sign*value*c.statDamage;
         if(!percent&&calibration.mainAttribute===stat)mainDelta+=sign*value;

@@ -7,18 +7,20 @@
   <link rel="icon" href="leaf.svg" type="image/svg+xml"><link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="buffs.css">
   <link rel="stylesheet" href="screenshot.css">
-  <link rel="stylesheet" href="equipment.css">
-  <script type="module" src="app.mjs?v=0.2.0-starforce"></script>
+  <link rel="stylesheet" href="equipment.css?v=0.3.0">
+  <link rel="stylesheet" href="inventory.css?v=0.3.0">
+  <script type="module" src="app.mjs?v=0.3.0-inventory"></script>
 </head>
 <body>
   <a class="skip" href="#main">본문 바로가기</a>
   <aside class="sidebar">
     <a class="brand" href="#spec" data-goto="spec"><img src="leaf.svg" width="36" height="36" alt=""><span>메키 스펙 연구소<small>MAPLE SPEC LAB</small></span></a>
-    <div class="workspace-label">MY WORKSPACE <span>β 0.2</span></div>
+    <div class="workspace-label">MY WORKSPACE <span>β 0.3</span></div>
     <nav aria-label="계산기 메뉴">
       <button data-page="spec" class="active"><span class="nav-icon">◈</span>내 스펙<span class="nav-arrow">↗</span></button>
       <button data-page="buffs"><span class="nav-icon">◉</span>직업 · 스킬 · 버프</button>
-      <button data-page="equipment"><span class="nav-icon">▣</span>장비 · 잠재 비교</button>
+      <button data-page="equipment"><span class="nav-icon">▣</span>장비 보관함</button>
+      <button data-page="potentials"><span class="nav-icon">✧</span>잠재 · 에디셔널</button>
       <button data-page="probability"><span class="nav-icon">◇</span>강화 기댓값</button>
       <button data-page="validation"><span class="nav-icon">⌁</span>공식 · 실측 검증</button>
     </nav>
@@ -30,7 +32,7 @@
       <div class="heading-row"><div><p class="eyebrow">MAKE YOUR NEXT UPGRADE COUNT</p><h1 id="page-title">내 다음 스펙업, 숫자로 확인하기</h1><p id="page-desc" class="muted">지금의 스펙을 기준으로, 더 나은 선택을 찾아보세요.</p></div><div class="heading-badge"><img src="leaf.svg" width="38" height="38" alt=""><span>작은 변화가 만드는<br><b>더 큰 데미지</b></span></div></div>
       <div class="notice"><span>ⓘ</span><div><b>공식 기반 · 실측 검증 대기</b><span>공식 일반 피해식 기준입니다. 직업 상세 표는 1.15.0 참고 자료로, 현재 게임 버전과 다를 수 있습니다. 각 효과의 지역·출처·적용 조건을 확인하세요.</span></div><a href="#validation" data-goto="validation">적용 범위 보기 ↗</a></div>
       <div id="view"></div>
-      <footer>메키 스펙 연구소 <span>비공식 팬 프로젝트 · NEXON 및 Able Games와 무관합니다.</span><span>MODEL 2026.10.15 / v0.2</span></footer>
+      <footer>메키 스펙 연구소 <span>비공식 팬 프로젝트 · NEXON 및 Able Games와 무관합니다.</span><span>MODEL 2026.10.15 / v0.3</span></footer>
     </main>
   </div>
   <div id="toast" role="status" aria-live="polite"></div>

@@ -42,6 +42,7 @@ export function validateEquipmentItem(item) {
   if(item.level!==null&&(!Number.isInteger(item.level)||item.level<0||item.level>10000))throw Error('장비 레벨을 확인하세요.');
   if(item.stars!==undefined&&item.stars!==null&&(!Number.isInteger(item.stars)||item.stars<0||item.stars>30))throw Error('장비의 별 강화는 0~30 사이의 정수로 입력하세요.');
   if(item.nameVerified!==undefined&&typeof item.nameVerified!=='boolean')throw Error('장비 이름 확인 상태를 확인하세요.');
+  if(item.icon!==undefined&&(typeof item.icon!=='string'||item.icon.length>40000||!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(item.icon)))throw Error('장비 아이콘 형식을 확인하세요.');
   if(!Array.isArray(item.effects)||item.effects.length>30)throw Error('장착 효과는 최대 30개입니다.');
   for(const effect of item.effects){
     if(!effect||typeof effect.label!=='string'||!effect.label.trim()||effect.label.length>60||!Number.isFinite(effect.value)||effect.value<0||effect.value>1e30||!['','%'].includes(effect.unit))throw Error('장착 효과의 항목·수치를 확인하세요.');
@@ -55,6 +56,8 @@ export function validateEquipmentLines(lines) {
   if(!Array.isArray(lines)||lines.length!==3)throw Error('잠재 옵션은 세 줄입니다.');
   for(const line of lines)if(!EFFECTS.some(([k])=>k===line.type)||!Number.isFinite(line.value)||line.value<0||line.value>1e30)throw Error('잠재 옵션 종류와 수치를 확인하세요.');
 }
+// Legacy combined import API. The UI uses registerInventory and
+// registerSlotPotentials in inventory-data.mjs to keep items and slots apart.
 export function registerEquipment(profile,records) {
   const next=structuredClone(profile),seen=new Set();
   for(const record of records) {

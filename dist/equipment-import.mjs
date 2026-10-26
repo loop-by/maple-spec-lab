@@ -1,18 +1,25 @@
 import {EFFECTS} from './engine.mjs';
-import {EQUIPMENT_SLOTS,registerEquipment,itemEffectGroups} from './equipment-data.mjs';
+import {EQUIPMENT_SLOTS,itemEffectGroups} from './equipment-data.mjs';
+import {registerInventory,registerSlotPotentials} from './inventory-data.mjs';
 import {readEquipmentScreenshots,checkEquipmentFiles} from './equipment-ocr.mjs';
 import {equipmentLine,itemEffect} from './equipment-parser.mjs';
 import {parseStatNumber} from './screenshot-parser.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onApply}) {
+export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,getMode=()=>'inventory',onApply}) {
   const picker=document.createElement('input');picker.type='file';picker.multiple=true;picker.accept='image/png,image/jpeg,image/webp';picker.hidden=true;picker.id='equipment-files';
   const dialog=document.createElement('dialog');dialog.className='equipment-dialog';dialog.setAttribute('aria-labelledby','equipment-import-title');
   dialog.innerHTML=`<div class="equipment-import-header"><h2 id="equipment-import-title">사진으로 장비 등록</h2><button type="button" data-eq-close aria-label="장비 사진 등록 닫기">×</button></div><div class="equipment-import-body"><p class="equipment-import-guide">장비 정보와 슬롯 강화 효과가 함께 보이는 사진을 선택하세요. 전체 게임 화면이나 두 패널을 함께 자른 사진을 지원합니다. 최대 12장을 한 번에 등록할 수 있어요.</p><div class="equipment-import-warning">선택한 장비의 현재 옵션과 비교 목표를 사진 값으로 설정합니다. 장착 효과는 기록으로 저장하며 내 스펙의 합계에 다시 더하지 않습니다.</div><p id="equipment-import-progress" class="equipment-import-progress" role="status" aria-live="polite"></p><p id="equipment-import-message" class="equipment-import-error" role="alert"></p><fieldset id="equipment-import-results" style="border:0;padding:0;margin:0;min-width:0"></fieldset></div><div class="equipment-import-footer"><p id="equipment-import-selection" role="status"></p><div class="actions"><button type="button" data-eq-retry>다른 사진 선택</button><button type="button" id="equipment-import-apply" class="primary" disabled>장비 등록</button></div></div>`;
   document.body.append(picker,dialog);
   const $=s=>dialog.querySelector(s);
-  let state=null,controller=null,token=0;
+  let state=null,controller=null,token=0,pendingMode='inventory',pendingEditId=null;
   const message=s=>{$('#equipment-import-message').textContent=s;};
+  const register=()=>state.mode==='inventory'?registerInventory(state.profile,selected()):registerSlotPotentials(state.profile,selected());
+  function explain(){
+    $('#equipment-import-title').textContent=state.mode==='inventory'?'장비 보관함에 등록':'슬롯 잠재·에디셔널 등록';
+    $('.equipment-import-guide').textContent=state.mode==='inventory'?'주·부 옵션이 보이는 장비 사진을 선택하세요. 장비 두 개의 비교 화면에서는 오른쪽 후보를 읽습니다. 같은 부위의 장비를 여러 개 보관할 수 있어요.':'장비 정보와 슬롯 강화 효과가 함께 보이는 사진을 선택하세요. 선택한 잠재·에디셔널만 슬롯에 등록합니다.';
+    $('.equipment-import-warning').textContent=state.mode==='inventory'?'장비의 주·부 옵션만 보관함에 저장합니다. 잠재·에디셔널과 현재 스펙은 그대로 유지합니다.':'잠재·에디셔널은 장비 아이템이 아닌 슬롯에 저장됩니다. 현재/목표 옵션을 같은 값으로 등록하며 현재 스펙은 유지합니다.';
+  }
   function release(){token++;controller?.abort();controller=null;for(const photo of state?.photos??[])URL.revokeObjectURL(photo.url);state=null;$('#equipment-import-results').replaceChildren();}
   function close(){release();dialog.close();document.querySelector('#import-equipment')?.focus();}
   function lineFields(record,index,key) {
@@ -31,50 +38,60 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
     $('#equipment-import-results').innerHTML=state.photos.map((photo,index)=>{
       const record=photo.record;
       if(!record)return `<div class="equipment-import-card"><b>사진 ${index+1}</b><p>${esc(photo.error||'읽기 대기 중')}</p></div>`;
-      return `<details class="equipment-import-card" open><summary><input type="checkbox" data-eq-select="${index}" ${photo.selected?'checked':''} aria-label="사진 ${index+1} 등록 선택"><b>사진 ${index+1} · ${esc(record.item.name||'장비 이름 확인 필요')}</b><span class="tag">${esc(EQUIPMENT_SLOTS.find(s=>s.key===record.slotKey)?.name??'부위 확인 필요')}</span></summary>
-        <div class="form-grid"><label class="field"><span>등록할 부위</span><select data-eq-meta="${index}:slotKey"><option value="">부위 선택</option>${EQUIPMENT_SLOTS.map(s=>`<option value="${s.key}" ${record.slotKey===s.key?'selected':''}>${s.name}</option>`).join('')}</select></label><label class="field"><span>장비 이름</span><input data-eq-meta="${index}:name" value="${esc(record.item.name)}" maxlength="100"></label><label class="field"><span>레벨</span><input type="number" min="0" max="10000" step="1" data-eq-meta="${index}:level" value="${record.item.level??''}"></label><label class="field"><span>장비 등급</span><select data-eq-meta="${index}:rarity"><option value="">미확인</option>${['레어','에픽','유니크','레전드리'].map(s=>`<option ${record.item.rarity===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="field"><span>품질</span><select data-eq-meta="${index}:quality"><option value="">미확인</option>${['하급','중급','상급','최상급'].map(s=>`<option ${record.item.quality===s?'selected':''}>${s}</option>`).join('')}</select></label></div>
+      return `<details class="equipment-import-card" open><summary><input type="checkbox" data-eq-select="${index}" ${photo.selected?'checked':''} aria-label="${index+1}번 등록 선택"><b>${photo.url?'사진':'장비'} ${index+1} · ${state.mode==='slots'?'슬롯 옵션':esc(record.item.name||'장비 이름 확인 필요')}</b><span class="tag">${esc(EQUIPMENT_SLOTS.find(s=>s.key===record.slotKey)?.name??'부위 확인 필요')}</span></summary>
+        <div class="form-grid"><label class="field"><span>등록할 부위</span><select data-eq-meta="${index}:slotKey"><option value="">부위 선택</option>${EQUIPMENT_SLOTS.map(s=>`<option value="${s.key}" ${record.slotKey===s.key?'selected':''}>${s.name}</option>`).join('')}</select></label>${state.mode==='inventory'?`<label class="field"><span>장비 이름</span><input data-eq-meta="${index}:name" value="${esc(record.item.name)}" maxlength="100"></label><label class="field"><span>레벨</span><input type="number" min="0" max="10000" step="1" data-eq-meta="${index}:level" value="${record.item.level??''}"></label><label class="field"><span>장비 등급</span><select data-eq-meta="${index}:rarity"><option value="">미확인</option>${['레어','에픽','유니크','레전드리'].map(s=>`<option ${record.item.rarity===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="field"><span>품질</span><select data-eq-meta="${index}:quality"><option value="">미확인</option>${['하급','중급','상급','최상급'].map(s=>`<option ${record.item.quality===s?'selected':''}>${s}</option>`).join('')}</select></label>`:''}</div>
+        ${state.mode==='inventory'?`
         <label class="field equipment-star-field"><span>별 강화 (성)</span><input type="number" min="0" max="30" step="1" data-eq-meta="${index}:stars" value="${record.item.stars??''}" placeholder="별 개수 확인" aria-label="사진 ${index+1} 별 강화"></label>
         ${record.item.stars===null?'<p class="equipment-import-warning">별 개수를 확실히 읽지 못했습니다. 원본 상단의 노란 별을 확인해 입력하세요.</p>':''}
         ${record.nameCorrection?`<p class="equipment-name-correction">장비명 대조: ${esc(record.nameCorrection.raw)} → <b>${esc(record.nameCorrection.name)}</b><br>확인된 장비명으로 보정했습니다. 다른 장비라면 이름 입력란에서 수정하세요.</p>`:record.nameConfidence<85?'<p class="equipment-import-warning">장비 이름을 원본과 확인해 주세요. 이름 입력란에서 바로 고칠 수 있어요.</p>':''}
         ${itemFields(record.item,index)}
-        ${lineFields(record,index,'potential')}${lineFields(record,index,'additional')}
-        <details><summary>원본 패널 크게 확인</summary><div class="equipment-source-panels">${(photo.preview??[]).map((src,n)=>`<figure><figcaption>${n?'잠재 옵션 원본':'장비 정보 원본'}</figcaption><img class="equipment-panel-preview" loading="lazy" src="${src}" alt="사진 ${index+1} ${n?'잠재 옵션':'장비 정보'} 원본 패널"></figure>`).join('')}</div><a href="${photo.url}" target="_blank" rel="noopener">전체 원본 사진 열기 ↗</a></details>
+        `:lineFields(record,index,'potential')+lineFields(record,index,'additional')}
+        ${photo.url?`<details><summary>원본 패널 크게 확인</summary><div class="equipment-source-panels">${(photo.preview??[]).map((src,n)=>`<figure><figcaption>${n?'잠재 옵션 원본':'장비 정보 원본'}</figcaption><img class="equipment-panel-preview" loading="lazy" src="${src}" alt="사진 ${index+1} ${n?'잠재 옵션':'장비 정보'} 원본 패널"></figure>`).join('')}</div><a href="${photo.url}" target="_blank" rel="noopener">전체 원본 사진 열기 ↗</a></details>`:''}
       </details>`;
     }).join('');update();
   }
   function selected(){return state.photos.filter(p=>p.selected&&p.record).map(p=>p.record);}
   function update(){
     const count=selected().length;let error='';
-    if(state.photos.some(p=>p.selected&&Object.values(p.effectsErrors??{}).some(Boolean)))error='주·부 옵션의 항목·수치를 확인하세요.';
-    if(count)try{registerEquipment(state.profile,selected());}catch(e){error=e.message;}
-    $('#equipment-import-selection').textContent=error||`${count}개 장비 선택 · 확인한 값만 등록합니다`;
+    if(state.mode==='inventory'&&state.photos.some(p=>p.selected&&Object.values(p.effectsErrors??{}).some(Boolean)))error='주·부 옵션의 항목·수치를 확인하세요.';
+    if(count)try{register();}catch(e){error=e.message;}
+    $('#equipment-import-selection').textContent=error||`${count}개 ${state.mode==='inventory'?'장비':'슬롯'} 선택 · 확인한 값만 등록합니다`;
     $('#equipment-import-apply').disabled=state.busy||!count||!!error;
-    $('#equipment-import-apply').textContent=count?`${count}개 장비 등록`:'장비 등록';
+    $('#equipment-import-apply').textContent=count?`${count}개 ${state.mode==='inventory'?'장비':'슬롯'} 등록`:'등록';
     $('#equipment-import-results').disabled=state.busy;
   }
   async function start(files) {
-    release();const run=token;controller=new AbortController();state={profile:structuredClone(getProfile()),selectedSlot:getSelectedSlot(),photos:[],busy:true};message('');
+    release();const run=token;controller=new AbortController();state={profile:structuredClone(getProfile()),selectedSlot:getSelectedSlot(),mode:pendingMode,editId:pendingEditId,photos:[],busy:true};message('');explain();
     $('#equipment-import-progress').hidden=false;$('#equipment-import-progress').textContent='사진을 준비하고 있어요.';
     dialog.querySelector('[data-eq-retry]').disabled=true;if(!dialog.open)dialog.showModal();update();
     try {
-      checkEquipmentFiles(files);state.photos=files.map(file=>({url:URL.createObjectURL(file),record:null,selected:false,error:null}));draw();
-      const knownNames=state.profile.equipment.filter(slot=>slot.item?.nameVerified).map(slot=>({slotKey:slot.slotKey,name:slot.item.name}));
-      await readEquipmentScreenshots(files,{signal:controller.signal,knownNames,onProgress:p=>{if(run===token)$('#equipment-import-progress').textContent=`사진 ${p.index+1}/${p.total} · ${p.stage}`;},onPhoto:p=>{
+      checkEquipmentFiles(files);if(state.editId&&files.length!==1)throw Error('장비 수정은 사진 한 장을 선택하세요.');state.photos=files.map(file=>({url:URL.createObjectURL(file),record:null,selected:false,error:null}));draw();
+      const knownNames=state.profile.inventory.filter(entry=>entry.item.nameVerified).map(entry=>({slotKey:entry.slotKey,name:entry.item.name}));
+      await readEquipmentScreenshots(files,{signal:controller.signal,mode:state.mode,knownNames,onProgress:p=>{if(run===token)$('#equipment-import-progress').textContent=`사진 ${p.index+1}/${p.total} · ${p.stage}`;},onPhoto:p=>{
         if(run!==token)return;const photo=state.photos[p.index];photo.record=p.record;photo.error=p.error;photo.preview=p.preview;
         if(files.length===1&&photo.record?.slotKey==='ring1'&&state.selectedSlot==='ring2')photo.record.slotKey='ring2';
-        photo.selected=!!p.record?.slotKey&&!!p.record?.item.name;
+        if(photo.record&&state.editId)photo.record.inventoryId=state.editId;
+        photo.selected=!!p.record?.slotKey&&(state.mode==='slots'||!!p.record?.item.name);
         draw();
       }});
     }catch(e){if(run===token&&!controller.signal.aborted)message(e.message||'장비 사진을 읽지 못했어요.');}
     finally{if(run===token){state.busy=false;$('#equipment-import-progress').hidden=true;dialog.querySelector('[data-eq-retry]').disabled=false;draw();}}
   }
-  document.addEventListener('click',e=>{if(e.target.closest('[data-import-equipment]'))picker.click();});
+  function manual(entry){
+    release();state={profile:structuredClone(getProfile()),selectedSlot:getSelectedSlot(),mode:'inventory',photos:[{url:'',selected:true,record:entry?{slotKey:entry.slotKey,item:structuredClone(entry.item),inventoryId:entry.id}:{slotKey:getSelectedSlot(),item:{name:'',level:null,stars:null,rarity:'',quality:'',effects:[]}}}],busy:false};message('');explain();$('#equipment-import-progress').hidden=true;dialog.querySelector('[data-eq-retry]').disabled=false;draw();if(!dialog.open)dialog.showModal();
+  }
+  document.addEventListener('click',e=>{
+    const trigger=e.target.closest('[data-import-equipment]');
+    if(trigger){pendingMode=trigger.dataset.importEquipment||getMode();pendingEditId=pendingMode==='inventory'?trigger.closest('[data-inventory-detail]')?.dataset.inventoryDetail??null:null;picker.click();}
+    if(e.target.closest('[data-new-inventory]'))manual();
+    const edit=e.target.closest('[data-edit-inventory]');if(edit)manual(getProfile().inventory.find(entry=>entry.id===edit.dataset.editInventory));
+  });
   picker.addEventListener('change',()=>{const files=[...picker.files];picker.value='';if(files.length)void start(files);});
   dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('close',()=>{if(state)release();});
   dialog.addEventListener('click',e=>{
     if(e.target.closest('[data-eq-close]')){close();return;}
-    if(e.target.closest('[data-eq-retry]')){picker.click();return;}
-    if(e.target.closest('#equipment-import-apply'))try{const profile=registerEquipment(state.profile,selected());onApply({profileId:state.profile.id,profile,count:selected().length});close();}catch(error){message(error.message);}
+    if(e.target.closest('[data-eq-retry]')){pendingMode=state.mode;pendingEditId=state.editId??state.photos[0]?.record?.inventoryId??null;picker.click();return;}
+    if(e.target.closest('#equipment-import-apply'))try{const profile=register();onApply({profileId:state.profile.id,profile,count:selected().length,mode:state.mode});close();}catch(error){message(error.message);}
   });
   function edit(e){
     if(!state||state.busy)return;const t=e.target;

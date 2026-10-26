@@ -18,6 +18,17 @@ function contrast(image,threshold=135) {
   for(let i=0;i<p.data.length;i+=4){const g=p.data[i]*.299+p.data[i+1]*.587+p.data[i+2]*.114;p.data[i]=p.data[i+1]=p.data[i+2]=g>threshold?0:255;}
   ctx.putImageData(p,0,0);return c;
 }
+function withoutComparisonDeltas(panel) {
+  const canvas=crop(panel,[0,0,panel.width,panel.height]),ctx=canvas.getContext('2d'),pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+  // The comparison view prints a red/green difference after the white total.
+  // Remove only colored pixels in the effect-value region before OCR, so a
+  // white "30" followed by a green "2" never becomes a total of "302".
+  for(let y=Math.floor(canvas.width*.77);y<canvas.height;y++)for(let x=Math.floor(canvas.width*.60);x<canvas.width;x++){
+    const i=(y*canvas.width+x)*4,r=pixels.data[i],g=pixels.data[i+1],b=pixels.data[i+2];
+    if(Math.max(r,g,b)-Math.min(r,g,b)>55)pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=40;
+  }
+  ctx.putImageData(pixels,0,0);return canvas;
+}
 function rowScore(row) {
   const parsed=equipmentLine(row.text);
   return (parsed?.type&&parsed.type!=='unread'?1000:0)+(/장착\s*효과|잠재\s*옵션|슬롯\s*강화|Lv\./i.test(row.text)?500:0)+(row.confidence??0);
@@ -48,7 +59,7 @@ function rowCrop(image,bbox,padding=8) {
   const x=Math.max(0,bbox.x0-padding),y=Math.max(0,bbox.y0-padding);
   return crop(image,[x,y,Math.min(image.width-x,bbox.x1-x+padding),Math.min(image.height-y,bbox.y1-y+padding)]);
 }
-export async function readEquipmentScreenshots(files,{signal,knownNames=[],onProgress=()=>{},onPhoto=()=>{}}={}) {
+export async function readEquipmentScreenshots(files,{signal,mode='combined',knownNames=[],onProgress=()=>{},onPhoto=()=>{}}={}) {
   checkEquipmentFiles(files);let worker,index=0;
   const abort=()=>worker?.terminate();signal?.addEventListener('abort',abort,{once:true});
   const results=[];
@@ -64,13 +75,21 @@ export async function readEquipmentScreenshots(files,{signal,knownNames=[],onPro
       return (await bounded(worker.recognize(canvas,{}, {text:true,blocks:true}),signal)).data;
     };
     for(index=0;index<files.length;index++) {
-      let image,panels=[];
+      let image,panels=[],originalItemPanel=null;
       try {
         onProgress({index,total:files.length,stage:'장비 정보 읽는 중'});
         image=await imageCanvas(files[index],signal);
         const full=image.width/image.height>1.4;
-        const relative=full?[[.332,.103,.272,.82],[.609,.103,.263,.59]]:[[0,0,.505,1],[.51,0,.49,.72]];
+        let comparison=false,relative=full?[[.332,.103,.272,.82],[.609,.103,.263,.59]]:[[0,0,.505,1],[.51,0,.49,.72]];
+        if(mode==='inventory'&&full){
+          const comparisons=[[.125,.103,.272,.82],[.4,.103,.272,.82]];
+          const headers=comparisons.map(r=>crop(image,[r[0]*image.width,r[1]*image.height,r[2]*image.width,r[2]*image.width*.16],520));
+          try{if(headers.every(c=>equipmentStars(c.getContext('2d').getImageData(0,0,c.width,c.height))!==null)){relative=comparisons.slice(1);comparison=true;}}
+          finally{for(const c of headers){c.width=1;c.height=1;}}
+        }
+        if(mode==='inventory')relative=relative.slice(0,1);
         panels=relative.map(r=>crop(image,[r[0]*image.width,r[1]*image.height,r[2]*image.width,r[3]*image.height],1040));
+        if(comparison){originalItemPanel=panels[0];panels[0]=withoutComparisonDeltas(originalItemPanel);}
         const starStrip=crop(panels[0],[0,0,panels[0].width,panels[0].width*.16]);
         let stars=null;
         try{stars=equipmentStars(starStrip.getContext('2d').getImageData(0,0,starStrip.width,starStrip.height));}
@@ -132,25 +151,30 @@ export async function readEquipmentScreenshots(files,{signal,knownNames=[],onPro
           if(read.confidence<85){const alternative=await recognize(titleCanvas,'kor','13');if(alternative.confidence>read.confidence)read=alternative;}
           title=read.text.trim();titleConfidence=read.confidence;
         }finally{titleCanvas.width=1;titleCanvas.height=1;}
-        const gradeCanvas=contrast(crop(panels[1],[735,410,295,130]),85);
-        let grade='';try{grade=(await recognize(gradeCanvas,'kor','7')).text.trim();}finally{gradeCanvas.width=1;gradeCanvas.height=1;}
-        const record=parseEquipment(readings[0],readings[1],{title,grade,metadata});
+        let grade='';
+        if(panels[1]){const gradeCanvas=contrast(crop(panels[1],[735,410,295,130]),85);try{grade=(await recognize(gradeCanvas,'kor','7')).text.trim();}finally{gradeCanvas.width=1;gradeCanvas.height=1;}}
+        const record=parseEquipment(readings[0],readings[1]??[],{title,grade,metadata});
         record.item.stars=stars;
+        if(mode==='inventory'){
+          const icon=crop(panels[0],[36,330,250,250],80);
+          try{record.item.icon=icon.toDataURL('image/webp',.7);}finally{icon.width=1;icon.height=1;}
+        }
         const identified=identifyEquipmentName(record.item.name,record.slotKey,{confidence:titleConfidence,knownNames});
         if(identified){record.item.name=identified.name;if(identified.corrected)record.nameCorrection=identified;}
-        if(record.additional&&panels[1].height>950){
+        if(record.additional&&panels[1]?.height>950){
           const additionalGrade=contrast(crop(panels[1],[735,820,295,130]),85);
           try{record.additionalGrade=(await recognize(additionalGrade,'kor','7')).text.match(/레전드리|유니크|에픽|레어/)?.[0]??'';}finally{additionalGrade.width=1;additionalGrade.height=1;}
         }
         record.nameConfidence=titleConfidence;
         record.source=index;results.push(record);
-        const preview=panels.map(panel=>{const c=crop(panel,[0,0,panel.width,panel.height],520);try{return c.toDataURL('image/png');}finally{c.width=1;c.height=1;}});
+        const preview=panels.map((panel,n)=>{const source=n===0&&originalItemPanel?originalItemPanel:panel,c=crop(source,[0,0,source.width,source.height],520);try{return c.toDataURL('image/png');}finally{c.width=1;c.height=1;}});
         onPhoto({index,record,error:null,preview});
       }catch(error){
         if(signal?.aborted||error.name==='AbortError')throw error;
         onPhoto({index,record:null,error:error.message||'장비 사진을 읽지 못했어요.'});
       }finally{
         for(const panel of panels){panel.width=1;panel.height=1;}
+        if(originalItemPanel){originalItemPanel.width=1;originalItemPanel.height=1;}
         if(image){image.width=1;image.height=1;}
       }
     }
