@@ -78,7 +78,7 @@ export async function readEquipmentScreenshots(files,{signal,onProgress=()=>{},o
             readings.push(combineRows(visualStatLines(mixed),visualStatLines(korean)));
           }finally{clean.width=1;clean.height=1;}
         }
-        onProgress({index,total:files.length,stage:'잠재 옵션 숫자 확인 중'});
+        onProgress({index,total:files.length,stage:'장착 효과·추가 옵션·잠재 수치 확인 중'});
         for(let group=0;group<readings.length;group++){
         let effectsStarted=group===1;
         for(const row of readings[group]) {

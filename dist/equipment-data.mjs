@@ -1,5 +1,11 @@
 import {EFFECTS} from './engine.mjs';
 
+export const ITEM_EFFECT_GROUPS=[['base','기본 장착 효과'],['random','추가 옵션'],['unclassified','분류 확인 필요']];
+const itemEffectTypes=new Set([...EFFECTS.map(([key])=>key),'unread',...Array.from({length:5},(_,i)=>`skillLevel${i+1}`)]);
+export function itemEffectGroups(item) {
+  return ITEM_EFFECT_GROUPS.map(([source,label])=>({source,label,effects:item.effects.filter(effect=>(effect.source??'unclassified')===source)}));
+}
+
 export const EQUIPMENT_SLOTS=[
   {key:'hat',name:'모자',row:1,col:1,symbol:'♧'},
   {key:'cape',name:'망토',row:1,col:4,symbol:'◇'},
@@ -35,7 +41,12 @@ export function validateEquipmentItem(item) {
   for(const key of ['rarity','quality'])if(typeof item[key]!=='string'||item[key].length>30)throw Error('장비 등급을 확인하세요.');
   if(item.level!==null&&(!Number.isInteger(item.level)||item.level<0||item.level>10000))throw Error('장비 레벨을 확인하세요.');
   if(!Array.isArray(item.effects)||item.effects.length>30)throw Error('장착 효과는 최대 30개입니다.');
-  for(const effect of item.effects)if(typeof effect.label!=='string'||effect.label.length>60||!Number.isFinite(effect.value)||effect.value<0||effect.value>1e30||!['','%'].includes(effect.unit))throw Error('장착 효과의 항목·수치를 확인하세요.');
+  for(const effect of item.effects){
+    if(!effect||typeof effect.label!=='string'||!effect.label.trim()||effect.label.length>60||!Number.isFinite(effect.value)||effect.value<0||effect.value>1e30||!['','%'].includes(effect.unit))throw Error('장착 효과의 항목·수치를 확인하세요.');
+    if(effect.source!==undefined&&!ITEM_EFFECT_GROUPS.some(([source])=>effect.source===source))throw Error('장비 효과의 기본·추가 옵션 구분을 확인하세요.');
+    if(effect.type!==undefined&&!itemEffectTypes.has(effect.type))throw Error('장비 효과의 종류를 확인하세요.');
+    if(/^skillLevel[1-5]$/.test(effect.type??'')&&(effect.unit!==''||!Number.isInteger(effect.value)))throw Error('스킬 레벨 추가 옵션은 % 없는 정수로 입력하세요.');
+  }
   return item;
 }
 export function validateEquipmentLines(lines) {

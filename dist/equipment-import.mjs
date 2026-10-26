@@ -1,7 +1,7 @@
 import {EFFECTS} from './engine.mjs';
-import {EQUIPMENT_SLOTS,registerEquipment} from './equipment-data.mjs';
+import {EQUIPMENT_SLOTS,registerEquipment,itemEffectGroups} from './equipment-data.mjs';
 import {readEquipmentScreenshots,checkEquipmentFiles} from './equipment-ocr.mjs';
-import {equipmentLine} from './equipment-parser.mjs';
+import {equipmentLine,itemEffect} from './equipment-parser.mjs';
 import {parseStatNumber} from './screenshot-parser.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -21,15 +21,20 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
       <label class="field"><span>등급</span><select data-eq-grade="${index}:${key}"><option value="">등급 미확인</option>${['레어','에픽','유니크','레전드리'].map(v=>`<option ${record[key+'Grade']===v?'selected':''}>${v}</option>`).join('')}</select></label>
       ${Array.from({length:3},(_,n)=>{const line=lines[n]??{type:'unread',value:0};return `<div class="equipment-import-line"><select data-eq-line="${index}:${key}:${n}:type" aria-label="사진 ${index+1} ${key==='potential'?'잠재':'에디셔널'} ${n+1}줄 종류">${line.type==='unread'?`<option value="unread">인식 확인: ${esc(line.label??'미인식')}</option>`:''}${EFFECTS.map(([type,label])=>`<option value="${type}" ${type===line.type?'selected':''}>${esc(label)}</option>`).join('')}</select><input type="text" inputmode="decimal" data-eq-line="${index}:${key}:${n}:value" value="${esc(line.value)}" aria-label="사진 ${index+1} ${key==='potential'?'잠재':'에디셔널'} ${n+1}줄 수치"></div>`;}).join('')}`;
   }
+  function itemFields(item,index) {
+    return itemEffectGroups(item).map(({source,label,effects})=>{
+      const uncertain=source==='unclassified'||effects.some(effect=>effect.value===null||equipmentLine(`${effect.label} ${effect.value}${effect.unit}`)?.type==='unread');
+      return `<details class="equipment-import-effects" ${source==='random'||effects.length&&uncertain?'open':''}><summary>${label} · 확인 / 수정 (${effects.length}개)</summary><p class="inline-note">${source==='random'?'장비 자체에 랜덤으로 붙은 옵션입니다. 잠재·에디셔널과 별도로 저장합니다.':source==='unclassified'?'화면에서 기본·추가 옵션의 경계를 확인하지 못했습니다. 원본을 보고 아래 값을 해당 입력란으로 옮길 수 있어요.':'한 줄에 항목명과 값을 적으세요. 같은 항목이 반복돼도 각각 보존합니다.'}${uncertain&&effects.length?' 불확실한 항목은 원본과 비교해 수정하세요.':''}</p><textarea data-eq-effects="${index}:${source}" aria-label="사진 ${index+1} ${label}" placeholder="${source==='random'?'예: 일반 몬스터 데미지 5%':'예: 공격력 100'}">${esc(effects.map(effect=>`${effect.label} ${effect.value===null?'숫자 확인':effect.value}${effect.unit}`).join('\n'))}</textarea></details>`;
+    }).join('');
+  }
   function draw() {
     $('#equipment-import-results').innerHTML=state.photos.map((photo,index)=>{
       const record=photo.record;
       if(!record)return `<div class="equipment-import-card"><b>사진 ${index+1}</b><p>${esc(photo.error||'읽기 대기 중')}</p></div>`;
-      const checkEffects=record.item.effects.some(e=>e.value===null||equipmentLine(`${e.label} ${e.value}${e.unit}`)?.type==='unread');
       return `<details class="equipment-import-card" open><summary><input type="checkbox" data-eq-select="${index}" ${photo.selected?'checked':''} aria-label="사진 ${index+1} 등록 선택"><b>사진 ${index+1} · ${esc(record.item.name||'장비 이름 확인 필요')}</b><span class="tag">${esc(EQUIPMENT_SLOTS.find(s=>s.key===record.slotKey)?.name??'부위 확인 필요')}</span></summary>
         <div class="form-grid"><label class="field"><span>등록할 부위</span><select data-eq-meta="${index}:slotKey"><option value="">부위 선택</option>${EQUIPMENT_SLOTS.map(s=>`<option value="${s.key}" ${record.slotKey===s.key?'selected':''}>${s.name}</option>`).join('')}</select></label><label class="field"><span>장비 이름</span><input data-eq-meta="${index}:name" value="${esc(record.item.name)}" maxlength="100"></label><label class="field"><span>레벨</span><input type="number" min="0" max="10000" step="1" data-eq-meta="${index}:level" value="${record.item.level??''}"></label><label class="field"><span>장비 등급</span><select data-eq-meta="${index}:rarity"><option value="">미확인</option>${['레어','에픽','유니크','레전드리'].map(s=>`<option ${record.item.rarity===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="field"><span>품질</span><select data-eq-meta="${index}:quality"><option value="">미확인</option>${['하급','중급','상급','최상급'].map(s=>`<option ${record.item.quality===s?'selected':''}>${s}</option>`).join('')}</select></label></div>
         ${record.nameConfidence<85?'<p class="equipment-import-warning">장비 이름을 원본과 확인해 주세요. 이름 입력란에서 바로 고칠 수 있어요.</p>':''}
-        <details class="equipment-import-effects" ${checkEffects?'open':''}><summary>장착 효과 확인 · 수정 (${record.item.effects.length}개)</summary><p class="inline-note">한 줄에 항목명과 값을 적으세요. 같은 항목이 두 번 나와도 각각 보존합니다. ${checkEffects?'인식이 불확실한 항목은 원본과 확인해 수정하세요.':''}</p><textarea data-eq-effects="${index}" aria-label="사진 ${index+1} 장착 효과">${esc(record.item.effects.map(e=>`${e.label} ${e.value===null?'숫자 확인':e.value}${e.unit}`).join('\n'))}</textarea></details>
+        ${itemFields(record.item,index)}
         ${lineFields(record,index,'potential')}${lineFields(record,index,'additional')}
         <details><summary>원본 패널 크게 확인</summary><div class="equipment-source-panels">${(photo.preview??[]).map((src,n)=>`<figure><figcaption>${n?'잠재 옵션 원본':'장비 정보 원본'}</figcaption><img class="equipment-panel-preview" loading="lazy" src="${src}" alt="사진 ${index+1} ${n?'잠재 옵션':'장비 정보'} 원본 패널"></figure>`).join('')}</div><a href="${photo.url}" target="_blank" rel="noopener">전체 원본 사진 열기 ↗</a></details>
       </details>`;
@@ -38,7 +43,7 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
   function selected(){return state.photos.filter(p=>p.selected&&p.record).map(p=>p.record);}
   function update(){
     const count=selected().length;let error='';
-    if(state.photos.some(p=>p.selected&&p.effectsError))error='장착 효과의 항목과 수치를 확인하세요.';
+    if(state.photos.some(p=>p.selected&&Object.values(p.effectsErrors??{}).some(Boolean)))error='장착 효과와 추가 옵션의 항목·수치를 확인하세요.';
     if(count)try{registerEquipment(state.profile,selected());}catch(e){error=e.message;}
     $('#equipment-import-selection').textContent=error||`${count}개 장비 선택 · 확인한 값만 등록합니다`;
     $('#equipment-import-apply').disabled=state.busy||!count||!!error;
@@ -76,7 +81,12 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
       else if(t.dataset.eqLayer){const [i,key]=t.dataset.eqLayer.split(':'),record=state.photos[Number(i)].record;record[key]=t.checked?Array.from({length:3},(_,n)=>({type:dialog.querySelector(`[data-eq-line="${i}:${key}:${n}:type"]`).value,value:parseStatNumber(dialog.querySelector(`[data-eq-line="${i}:${key}:${n}:value"]`).value)})):null;}
       else if(t.dataset.eqGrade){const [i,key]=t.dataset.eqGrade.split(':');state.photos[Number(i)].record[key+'Grade']=t.value;}
       else if(t.dataset.eqLine){const [i,key,n,field]=t.dataset.eqLine.split(':'),record=state.photos[Number(i)].record;if(!record[key])return;record[key][Number(n)]??={type:'unread',value:0};record[key][Number(n)][field]=field==='value'?parseStatNumber(t.value):t.value;}
-      else if(t.dataset.eqEffects!==undefined){const photo=state.photos[Number(t.dataset.eqEffects)],record=photo.record;const effects=t.value.split('\n').filter(s=>s.trim()).map(equipmentLine);photo.effectsError=effects.some(e=>!e);if(photo.effectsError)throw Error('장착 효과는 「공격력 100」처럼 항목과 수치를 입력하세요.');record.item.effects=effects.map(e=>({label:e.label,value:e.value,unit:e.unit}));}
+      else if(t.dataset.eqEffects!==undefined){
+        const [i,source]=t.dataset.eqEffects.split(':'),photo=state.photos[Number(i)],record=photo.record;
+        const effects=t.value.split('\n').filter(s=>s.trim()).map(equipmentLine);photo.effectsErrors??={};photo.effectsErrors[source]=effects.some(effect=>!effect);
+        if(photo.effectsErrors[source])throw Error('장비 효과는 「공격력 100」, 「3차 스킬 레벨 12」처럼 항목과 수치를 입력하세요.');
+        record.item.effects=[...record.item.effects.filter(effect=>(effect.source??'unclassified')!==source),...effects.map(effect=>itemEffect(effect,source))];
+      }
       else return;
       message('');update();
     }catch(error){message(error.message);$('#equipment-import-apply').disabled=true;}

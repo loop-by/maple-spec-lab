@@ -1,4 +1,4 @@
-import {EQUIPMENT_SLOTS,findEquipmentIndex,slotKey} from './equipment-data.mjs';
+import {EQUIPMENT_SLOTS,findEquipmentIndex,slotKey,itemEffectGroups} from './equipment-data.mjs';
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function equipmentBoard(p,selectedIndex,selectedLayer,canUndo=false) {
   return `<section class="panel equipment-board-panel"><div class="section-heading"><div><h2>내 장비</h2><p>게임과 같은 위치에서 부위를 선택하세요.</p></div><button type="button" class="primary" id="import-equipment" data-import-equipment>장비 사진 등록</button></div>
@@ -16,5 +16,7 @@ export function equipmentBoard(p,selectedIndex,selectedLayer,canUndo=false) {
 export function equipmentDetails(slot) {
   const item=slot.item;
   if(!item)return '<div class="equipment-empty"><b>장비 사진으로 현재 옵션을 등록하세요.</b><p>장비 정보와 슬롯 강화 효과가 함께 보이는 화면을 선택하면 잠재 옵션까지 읽습니다.</p><button type="button" data-import-equipment class="primary">이 부위 사진 등록</button></div>';
-  return `<section class="equipped-item"><span class="tag">${esc(item.rarity)} · ${esc(item.quality)}</span><h3>${esc(item.name)}</h3><small>${item.level!==null?'Lv. '+item.level:''}</small><div class="equipment-effects">${item.effects.map(e=>`<div><span>${esc(e.label)}</span><b>${Number(e.value).toLocaleString('ko-KR')}${e.unit}</b></div>`).join('')}</div><p class="inline-note">장착 효과는 장비 기록입니다. 내 스펙의 현재 합계에 다시 더하지 않습니다.</p></section>`;
+  const groups=itemEffectGroups(item).filter(group=>group.effects.length).map(({source,label,effects})=>`<section class="equipment-effect-group ${source==='random'?'equipment-random-options':''}"><h4>${label}</h4><div class="equipment-effects">${effects.map(effect=>`<div><span>${esc(effect.label)}</span><b>${Number(effect.value).toLocaleString('ko-KR')}${effect.unit}</b></div>`).join('')}</div></section>`).join('');
+  const hasSkillLevel=item.effects.some(effect=>/^skillLevel/.test(effect.type??'')||/차\s*스킬\s*레벨/.test(effect.label));
+  return `<section class="equipped-item"><span class="tag">${esc(item.rarity)} · ${esc(item.quality)}</span><h3>${esc(item.name)}</h3><small>${item.level!==null?'Lv. '+item.level:''}</small>${groups}<p class="inline-note">기본 장착 효과와 추가 옵션은 내 스펙의 현재 합계에 이미 포함된 장비 기록입니다.${hasSkillLevel?' 스킬 레벨 추가 옵션은 기록하며 스킬 피해로 자동 환산하지 않습니다.':''}</p>${item.effects.some(effect=>!effect.source||effect.source==='unclassified')?'<p class="inline-note">기존 기록 또는 경계가 불확실한 항목입니다. 사진을 다시 등록하면 기본·추가 옵션을 구분할 수 있어요.</p>':''}<button type="button" data-import-equipment class="small">사진 다시 등록</button></section>`;
 }
