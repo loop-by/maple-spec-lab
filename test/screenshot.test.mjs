@@ -133,7 +133,7 @@ test('a help icon read as a tiny 1 is removed on the label side, while a real va
 });
 test('punctuated help-icon noise is removed only on the left of a numeric column',()=>{
   const word=(text,x,width)=>({text,confidence:90,bbox:{x0:x,x1:x+width,y0:20,y1:42}});
-  for(const token of [':1:',':ㄴ:','ㅣ:','(i','(|']) {
+  for(const token of [':1:',':ㄴ:','ㅣ:','(i','(|','“1;','1〉','(1;']) {
     const data={blocks:[{paragraphs:[{lines:[{words:[word('공격 속도',20,120),word(token,160,22),word('57.9%',350,100)]}]}]}]};
     assert.equal(parseStatLines(visualStatLines(data))[0]?.value,57.9,token);
   }

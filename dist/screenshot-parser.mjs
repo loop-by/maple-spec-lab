@@ -32,7 +32,7 @@ const units = {조:1e12,억:1e8,만:1e4,천:1e3,k:1e3,m:1e6,b:1e9,t:1e12};
 // Help icons are not part of either the stat label or its number. Only strip
 // known icon tokens at the label boundary; never repair letters inside numbers.
 const separator=/^\s*(?:(?:[ⓘℹ©®@]|\(\s*[iIl1|]\s*\)?|[iIl](?=\s|[:：]))\s*)*[:：]?\s*/u;
-const isHelpToken=text=>/^[ⓘℹ©®@iIlOo01|ㄱ-ㅎㅏ-ㅣ]?$/.test(text.replace(/[():;\[\]{}'"·.：]/g,'').trim());
+const isHelpToken=text=>/^[ⓘℹ©®@iIlOo01|ㄱ-ㅎㅏ-ㅣ]?$/.test(text.replace(/[():;\[\]{}'"“”‘’<>〈〉《》·.：]/g,'').trim());
 
 export function parseStatNumber(raw) {
   let text = String(raw).normalize('NFKC').trim().replace(/\s*%\s*$/, '').replace(/^\+\s*/, '');
