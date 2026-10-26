@@ -2,6 +2,7 @@ import {bounded,imageCanvas} from './screenshot-ocr.mjs';
 import {createOcrSession} from './screenshot-worker-client.mjs';
 import {visualStatLines,parseStatNumber} from './screenshot-parser.mjs';
 import {equipmentLine,parseEquipment} from './equipment-parser.mjs';
+import {identifyEquipmentName,equipmentStars} from './equipment-identification.mjs';
 
 export function checkEquipmentFiles(files) {
   if(!files.length||files.length>12)throw Error('장비 사진은 한 번에 1~12장 선택하세요.');
@@ -47,7 +48,7 @@ function rowCrop(image,bbox,padding=8) {
   const x=Math.max(0,bbox.x0-padding),y=Math.max(0,bbox.y0-padding);
   return crop(image,[x,y,Math.min(image.width-x,bbox.x1-x+padding),Math.min(image.height-y,bbox.y1-y+padding)]);
 }
-export async function readEquipmentScreenshots(files,{signal,onProgress=()=>{},onPhoto=()=>{}}={}) {
+export async function readEquipmentScreenshots(files,{signal,knownNames=[],onProgress=()=>{},onPhoto=()=>{}}={}) {
   checkEquipmentFiles(files);let worker,index=0;
   const abort=()=>worker?.terminate();signal?.addEventListener('abort',abort,{once:true});
   const results=[];
@@ -70,6 +71,10 @@ export async function readEquipmentScreenshots(files,{signal,onProgress=()=>{},o
         const full=image.width/image.height>1.4;
         const relative=full?[[.332,.103,.272,.82],[.609,.103,.263,.59]]:[[0,0,.505,1],[.51,0,.49,.72]];
         panels=relative.map(r=>crop(image,[r[0]*image.width,r[1]*image.height,r[2]*image.width,r[3]*image.height],1040));
+        const starStrip=crop(panels[0],[0,0,panels[0].width,panels[0].width*.16]);
+        let stars=null;
+        try{stars=equipmentStars(starStrip.getContext('2d').getImageData(0,0,starStrip.width,starStrip.height));}
+        finally{starStrip.width=1;starStrip.height=1;}
         const readings=[];
         for(const panel of panels){
           const clean=contrast(panel);
@@ -78,7 +83,7 @@ export async function readEquipmentScreenshots(files,{signal,onProgress=()=>{},o
             readings.push(combineRows(visualStatLines(mixed),visualStatLines(korean)));
           }finally{clean.width=1;clean.height=1;}
         }
-        onProgress({index,total:files.length,stage:'장착 효과·추가 옵션·잠재 수치 확인 중'});
+        onProgress({index,total:files.length,stage:'주 옵션·부 옵션·잠재 수치 확인 중'});
         for(let group=0;group<readings.length;group++){
         let effectsStarted=group===1;
         for(const row of readings[group]) {
@@ -130,6 +135,9 @@ export async function readEquipmentScreenshots(files,{signal,onProgress=()=>{},o
         const gradeCanvas=contrast(crop(panels[1],[735,410,295,130]),85);
         let grade='';try{grade=(await recognize(gradeCanvas,'kor','7')).text.trim();}finally{gradeCanvas.width=1;gradeCanvas.height=1;}
         const record=parseEquipment(readings[0],readings[1],{title,grade,metadata});
+        record.item.stars=stars;
+        const identified=identifyEquipmentName(record.item.name,record.slotKey,{confidence:titleConfidence,knownNames});
+        if(identified){record.item.name=identified.name;if(identified.corrected)record.nameCorrection=identified;}
         if(record.additional&&panels[1].height>950){
           const additionalGrade=contrast(crop(panels[1],[735,820,295,130]),85);
           try{record.additionalGrade=(await recognize(additionalGrade,'kor','7')).text.match(/레전드리|유니크|에픽|레어/)?.[0]??'';}finally{additionalGrade.width=1;additionalGrade.height=1;}

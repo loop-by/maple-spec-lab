@@ -41,8 +41,8 @@ function parseItemEffects(rows) {
   };
   for(const row of rows){
     const text=typeof row==='string'?row:row.text,compact=text.replace(/\s/g,'');
-    if(/^(장착효과|기본(?:장착)?(?:효과|옵션))$/.test(compact)){started=true;source=compact==='장착효과'?'unclassified':'base';continue;}
-    if(/^(?:랜덤)?추가옵션$/.test(compact)){started=true;source='random';continue;}
+    if(/^(장착효과|주옵션|기본(?:장착)?(?:효과|옵션))$/.test(compact)){started=true;source=compact==='장착효과'?'unclassified':'base';continue;}
+    if(/^(?:부옵션|(?:랜덤)?추가옵션)$/.test(compact)){started=true;source='random';continue;}
     if(!started)continue;
     if(/^(잠재옵션|에디셔널잠재|보유효과|세트효과)/.test(compact))break;
     const line=equipmentLine(text)??(row.numberUnread&&row.labelHint?{...equipmentLine(row.labelHint+' 0'),label:row.labelHint,value:null,unit:''}:null);

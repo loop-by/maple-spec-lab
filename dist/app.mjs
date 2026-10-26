@@ -1,4 +1,4 @@
-import {equipmentBoard,equipmentDetails} from './equipment-view.mjs';
+import {equipmentBoard,equipmentDetails,starforceRows} from './equipment-view.mjs';
 import {setupEquipmentImport} from './equipment-import.mjs';
 import {newEquipment,findEquipmentIndex,slotKey,validateEquipmentItem} from './equipment-data.mjs';
 import {GAME_STAT_KEYS} from './stat-layout.mjs';
@@ -129,6 +129,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{const t=e.target,p=current();try{
   if(handleBuffChange(t,p)){save();render();return;}
+  if(t.dataset.starTarget!==undefined){const item=p.equipment[selectedSlot].item;if(item)t.closest('[data-starforce-preview]').querySelector('[data-starforce-values]').innerHTML=starforceRows(item,Number(t.value));return;}
   if(t.dataset.stat){if(t.value==='')throw Error('스탯 값은 비워둘 수 없습니다.');const value=Number(t.value),prev=p.stats[t.dataset.stat];p.stats[t.dataset.stat]=value;try{validateStats(p.stats);}catch(error){p.stats[t.dataset.stat]=prev;throw error;}save();resultUpdate();return;}
   if(t.dataset.meta){if(!Number.isInteger(Number(t.value))||Number(t.value)<1||Number(t.value)>10000)throw Error('레벨을 확인하세요.');p.level=Number(t.value);}
   else if(t.dataset.cal){const [k,f]=t.dataset.cal.split('.');p.calibration[k]??={};if(t.value==='')delete p.calibration[k][f];else{const v=Number(t.value);if(!Number.isFinite(v))throw Error('유한수를 입력하세요.');p.calibration[k][f]=v;}}

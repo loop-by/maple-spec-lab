@@ -24,7 +24,7 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
   function itemFields(item,index) {
     return itemEffectGroups(item).map(({source,label,effects})=>{
       const uncertain=source==='unclassified'||effects.some(effect=>effect.value===null||equipmentLine(`${effect.label} ${effect.value}${effect.unit}`)?.type==='unread');
-      return `<details class="equipment-import-effects" ${source==='random'||effects.length&&uncertain?'open':''}><summary>${label} · 확인 / 수정 (${effects.length}개)</summary><p class="inline-note">${source==='random'?'장비 자체에 랜덤으로 붙은 옵션입니다. 잠재·에디셔널과 별도로 저장합니다.':source==='unclassified'?'화면에서 기본·추가 옵션의 경계를 확인하지 못했습니다. 원본을 보고 아래 값을 해당 입력란으로 옮길 수 있어요.':'한 줄에 항목명과 값을 적으세요. 같은 항목이 반복돼도 각각 보존합니다.'}${uncertain&&effects.length?' 불확실한 항목은 원본과 비교해 수정하세요.':''}</p><textarea data-eq-effects="${index}:${source}" aria-label="사진 ${index+1} ${label}" placeholder="${source==='random'?'예: 일반 몬스터 데미지 5%':'예: 공격력 100'}">${esc(effects.map(effect=>`${effect.label} ${effect.value===null?'숫자 확인':effect.value}${effect.unit}`).join('\n'))}</textarea></details>`;
+      return `<details class="equipment-import-effects" ${source==='random'||effects.length&&uncertain?'open':''}><summary>${label} · 확인 / 수정 (${effects.length}개)</summary><p class="inline-note">${source==='random'?'장비 자체에 랜덤으로 붙은 부 옵션입니다. 잠재·에디셔널과 별도로 저장합니다.':source==='unclassified'?'화면에서 주·부 옵션의 경계를 확인하지 못했습니다. 원본을 보고 아래 값을 해당 입력란으로 옮길 수 있어요.':'한 줄에 항목명과 값을 적으세요. 같은 항목이 반복돼도 각각 보존합니다.'}${uncertain&&effects.length?' 불확실한 항목은 원본과 비교해 수정하세요.':''}</p><textarea data-eq-effects="${index}:${source}" aria-label="사진 ${index+1} ${label}" placeholder="${source==='random'?'예: 일반 몬스터 데미지 5%':'예: 공격력 100'}">${esc(effects.map(effect=>`${effect.label} ${effect.value===null?'숫자 확인':effect.value}${effect.unit}`).join('\n'))}</textarea></details>`;
     }).join('');
   }
   function draw() {
@@ -33,7 +33,9 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
       if(!record)return `<div class="equipment-import-card"><b>사진 ${index+1}</b><p>${esc(photo.error||'읽기 대기 중')}</p></div>`;
       return `<details class="equipment-import-card" open><summary><input type="checkbox" data-eq-select="${index}" ${photo.selected?'checked':''} aria-label="사진 ${index+1} 등록 선택"><b>사진 ${index+1} · ${esc(record.item.name||'장비 이름 확인 필요')}</b><span class="tag">${esc(EQUIPMENT_SLOTS.find(s=>s.key===record.slotKey)?.name??'부위 확인 필요')}</span></summary>
         <div class="form-grid"><label class="field"><span>등록할 부위</span><select data-eq-meta="${index}:slotKey"><option value="">부위 선택</option>${EQUIPMENT_SLOTS.map(s=>`<option value="${s.key}" ${record.slotKey===s.key?'selected':''}>${s.name}</option>`).join('')}</select></label><label class="field"><span>장비 이름</span><input data-eq-meta="${index}:name" value="${esc(record.item.name)}" maxlength="100"></label><label class="field"><span>레벨</span><input type="number" min="0" max="10000" step="1" data-eq-meta="${index}:level" value="${record.item.level??''}"></label><label class="field"><span>장비 등급</span><select data-eq-meta="${index}:rarity"><option value="">미확인</option>${['레어','에픽','유니크','레전드리'].map(s=>`<option ${record.item.rarity===s?'selected':''}>${s}</option>`).join('')}</select></label><label class="field"><span>품질</span><select data-eq-meta="${index}:quality"><option value="">미확인</option>${['하급','중급','상급','최상급'].map(s=>`<option ${record.item.quality===s?'selected':''}>${s}</option>`).join('')}</select></label></div>
-        ${record.nameConfidence<85?'<p class="equipment-import-warning">장비 이름을 원본과 확인해 주세요. 이름 입력란에서 바로 고칠 수 있어요.</p>':''}
+        <label class="field equipment-star-field"><span>별 강화 (성)</span><input type="number" min="0" max="30" step="1" data-eq-meta="${index}:stars" value="${record.item.stars??''}" placeholder="별 개수 확인" aria-label="사진 ${index+1} 별 강화"></label>
+        ${record.item.stars===null?'<p class="equipment-import-warning">별 개수를 확실히 읽지 못했습니다. 원본 상단의 노란 별을 확인해 입력하세요.</p>':''}
+        ${record.nameCorrection?`<p class="equipment-name-correction">장비명 대조: ${esc(record.nameCorrection.raw)} → <b>${esc(record.nameCorrection.name)}</b><br>확인된 장비명으로 보정했습니다. 다른 장비라면 이름 입력란에서 수정하세요.</p>`:record.nameConfidence<85?'<p class="equipment-import-warning">장비 이름을 원본과 확인해 주세요. 이름 입력란에서 바로 고칠 수 있어요.</p>':''}
         ${itemFields(record.item,index)}
         ${lineFields(record,index,'potential')}${lineFields(record,index,'additional')}
         <details><summary>원본 패널 크게 확인</summary><div class="equipment-source-panels">${(photo.preview??[]).map((src,n)=>`<figure><figcaption>${n?'잠재 옵션 원본':'장비 정보 원본'}</figcaption><img class="equipment-panel-preview" loading="lazy" src="${src}" alt="사진 ${index+1} ${n?'잠재 옵션':'장비 정보'} 원본 패널"></figure>`).join('')}</div><a href="${photo.url}" target="_blank" rel="noopener">전체 원본 사진 열기 ↗</a></details>
@@ -43,7 +45,7 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
   function selected(){return state.photos.filter(p=>p.selected&&p.record).map(p=>p.record);}
   function update(){
     const count=selected().length;let error='';
-    if(state.photos.some(p=>p.selected&&Object.values(p.effectsErrors??{}).some(Boolean)))error='장착 효과와 추가 옵션의 항목·수치를 확인하세요.';
+    if(state.photos.some(p=>p.selected&&Object.values(p.effectsErrors??{}).some(Boolean)))error='주·부 옵션의 항목·수치를 확인하세요.';
     if(count)try{registerEquipment(state.profile,selected());}catch(e){error=e.message;}
     $('#equipment-import-selection').textContent=error||`${count}개 장비 선택 · 확인한 값만 등록합니다`;
     $('#equipment-import-apply').disabled=state.busy||!count||!!error;
@@ -56,7 +58,8 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
     dialog.querySelector('[data-eq-retry]').disabled=true;if(!dialog.open)dialog.showModal();update();
     try {
       checkEquipmentFiles(files);state.photos=files.map(file=>({url:URL.createObjectURL(file),record:null,selected:false,error:null}));draw();
-      await readEquipmentScreenshots(files,{signal:controller.signal,onProgress:p=>{if(run===token)$('#equipment-import-progress').textContent=`사진 ${p.index+1}/${p.total} · ${p.stage}`;},onPhoto:p=>{
+      const knownNames=state.profile.equipment.filter(slot=>slot.item?.nameVerified).map(slot=>({slotKey:slot.slotKey,name:slot.item.name}));
+      await readEquipmentScreenshots(files,{signal:controller.signal,knownNames,onProgress:p=>{if(run===token)$('#equipment-import-progress').textContent=`사진 ${p.index+1}/${p.total} · ${p.stage}`;},onPhoto:p=>{
         if(run!==token)return;const photo=state.photos[p.index];photo.record=p.record;photo.error=p.error;photo.preview=p.preview;
         if(files.length===1&&photo.record?.slotKey==='ring1'&&state.selectedSlot==='ring2')photo.record.slotKey='ring2';
         photo.selected=!!p.record?.slotKey&&!!p.record?.item.name;
@@ -77,7 +80,7 @@ export function setupEquipmentImport({getProfile,getSelectedSlot=()=>null,onAppl
     if(!state||state.busy)return;const t=e.target;
     try {
       if(t.dataset.eqSelect!==undefined)state.photos[Number(t.dataset.eqSelect)].selected=t.checked;
-      else if(t.dataset.eqMeta){const [i,key]=t.dataset.eqMeta.split(':'),record=state.photos[Number(i)].record;if(key==='slotKey')record.slotKey=t.value;else record.item[key]=key==='level'?(t.value===''?null:Number(t.value)):t.value;}
+      else if(t.dataset.eqMeta){const [i,key]=t.dataset.eqMeta.split(':'),record=state.photos[Number(i)].record;if(key==='slotKey')record.slotKey=t.value;else{record.item[key]=['level','stars'].includes(key)?(t.value===''?null:Number(t.value)):t.value;if(key==='name')record.item.nameVerified=true;}}
       else if(t.dataset.eqLayer){const [i,key]=t.dataset.eqLayer.split(':'),record=state.photos[Number(i)].record;record[key]=t.checked?Array.from({length:3},(_,n)=>({type:dialog.querySelector(`[data-eq-line="${i}:${key}:${n}:type"]`).value,value:parseStatNumber(dialog.querySelector(`[data-eq-line="${i}:${key}:${n}:value"]`).value)})):null;}
       else if(t.dataset.eqGrade){const [i,key]=t.dataset.eqGrade.split(':');state.photos[Number(i)].record[key+'Grade']=t.value;}
       else if(t.dataset.eqLine){const [i,key,n,field]=t.dataset.eqLine.split(':'),record=state.photos[Number(i)].record;if(!record[key])return;record[key][Number(n)]??={type:'unread',value:0};record[key][Number(n)][field]=field==='value'?parseStatNumber(t.value):t.value;}
