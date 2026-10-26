@@ -45,7 +45,7 @@ export function setupScreenshotImport({getProfile,onApply}) {
   }
   function rowHTML(row) {
     const needCheck=row.conflict||row.confidence<85||row.value===null||row.ambiguousCrit||row.unitMissing;
-    const reason=row.reviewed?'직접 확인한 값':row.conflict?'사진마다 값이 달라요':row.value===null?'숫자 확인 필요':row.ambiguousCrit?'배율 의미 확인 필요':row.unitMissing?'% 기호를 읽지 못했어요':row.confidence<85?'원본과 확인해 주세요':'읽은 값';
+    const reason=row.reviewed?'직접 확인한 값':row.conflict?'인식된 값이 서로 달라요':row.value===null?'숫자 확인 필요':row.ambiguousCrit?'배율 의미 확인 필요':row.unitMissing?'% 기호를 읽지 못했어요':row.confidence<85?'원본과 확인해 주세요':'읽은 값';
     return `<article class="shot-row ${needCheck?'needs-review':''}" data-shot-row="${row.key}">
       <div class="shot-row-title"><label><input type="checkbox" data-shot-select="${row.key}" ${row.selected?'checked':''}><b>${esc(row.label)}</b></label><span class="tag ${needCheck?'orange':'gray'}">${reason}</span></div>
       <div class="shot-values"><div><span>기존 값</span><strong>${fmt(state.profile.stats[row.key])}${esc(row.unit)}</strong></div><span aria-hidden="true">→</span><label><span>반영할 값 ${esc(row.unit)}</span><input type="text" inputmode="decimal" autocomplete="off" data-shot-value="${row.key}" value="${esc(row.raw)}" aria-label="${esc(row.label)} 반영할 값"></label></div>

@@ -47,6 +47,26 @@ function cropLine(canvas,bbox) {
   return crop.toDataURL('image/png');
 }
 
+function recognitionImage(canvas) {
+  const ctx=canvas.getContext('2d'),pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+  let luminance=0,samples=0;
+  for(let i=0;i<pixels.data.length;i+=64) {
+    luminance+=(pixels.data[i]+pixels.data[i+1]+pixels.data[i+2])/3;samples++;
+  }
+  // Normalize plain light/dark panels to dark text on white. Keep mixed-color
+  // game scenes untouched instead of thresholding away parts of their text.
+  const average=luminance/samples,invert=average<100;
+  if(!invert&&average<180)return canvas;
+  const copy=document.createElement('canvas');copy.width=canvas.width;copy.height=canvas.height;
+  for(let i=0;i<pixels.data.length;i+=4) {
+    let gray=pixels.data[i]*0.299+pixels.data[i+1]*0.587+pixels.data[i+2]*0.114;
+    if(invert)gray=255-gray;
+    pixels.data[i]=pixels.data[i+1]=pixels.data[i+2]=gray<195?0:255;
+  }
+  copy.getContext('2d').putImageData(pixels,0,0);
+  return copy;
+}
+
 export async function readScreenshots(files,{signal,onProgress=()=>{},onPhoto=()=>{}}={}) {
   checkScreenshotFiles(files);
   let worker,index=0,ready=false;
@@ -68,18 +88,31 @@ export async function readScreenshots(files,{signal,onProgress=()=>{},onPhoto=()
     const candidates=[];
     for(index=0;index<files.length;index++) {
       if(signal?.aborted) throw abortError();
-      let canvas;
+      let canvas,recognition;
       try {
-        phase='글자 읽는 중';completed=0;segment=0.8;
+        phase='글자 읽는 중';completed=0;segment=0.4;
         onProgress({index,total:files.length,stage:'사진 여는 중',progress:0});
         canvas=await imageCanvas(files[index],signal);
+        recognition=recognitionImage(canvas);
         await bounded(worker.reinitialize('kor+eng',1),signal);
         await bounded(worker.setParameters({tessedit_pageseg_mode:'11',preserve_interword_spaces:'1',tessedit_char_whitelist:''}),signal);
-        const {data}=await bounded(worker.recognize(canvas,{}, {text:true,blocks:true}),signal);
+        const {data}=await bounded(worker.recognize(recognition,{}, {text:true,blocks:true}),signal);
         const parsed=parseStatLines(visualStatLines(data),index);
-        // Korean OCR can read '%' as '96'. Re-read only the number crop in
-        // English; never guess that a trailing 96 should be a percent sign.
-        const retry=parsed.filter(c=>c.unitMissing && c.valueBbox && /^[+\d.,\s]+$/.test(c.raw));
+        const textResults=[data.text??''];
+        const hasKorean=(data.text?.match(/[가-힣]/g)??[]).length>=8;
+        if(hasKorean || (data.text?.match(/[a-z]/gi)??[]).length>=8) {
+          // Mixed-language recognition can confuse short gray labels. Keep
+          // its readings and verify labels in the detected script as well.
+          phase='항목명 확인 중';completed=0.4;segment=0.3;
+          await bounded(worker.reinitialize(hasKorean?'kor':'eng',1),signal);
+          await bounded(worker.setParameters({tessedit_pageseg_mode:hasKorean&&recognition!==canvas?'6':'11'}),signal);
+          const {data:labels}=await bounded(worker.recognize(recognition,{}, {text:true,blocks:true}),signal);
+          parsed.push(...parseStatLines(visualStatLines(labels),index));
+          textResults.push(labels.text??'');
+        }
+        // Read the right-aligned value independently of the gray Korean label
+        // and help icon. Do not assume a missing '%' or decimal point.
+        const retry=parsed.filter(c=>c.valueBbox && /^[+\d.,%\s]+$/.test(c.raw));
         if(retry.length) {
           await bounded(worker.reinitialize('eng',1),signal);
           await bounded(worker.setParameters({tessedit_pageseg_mode:'7',tessedit_char_whitelist:'0123456789.,%+'}),signal);
@@ -88,24 +121,33 @@ export async function readScreenshots(files,{signal,onProgress=()=>{},onPhoto=()
             completed=0.8+numberIndex*segment;
             const crop=cropLine(canvas,candidate.valueBbox);
             const {data:number}=await bounded(worker.recognize(crop),signal);
-            if(!/%\s*$/.test(number.text))continue;
-            const checked=parseStatLines([{text:`${candidate.matchedLabel} ${number.text.trim()}`,confidence:Math.min(candidate.confidence,number.confidence)}],index)[0];
-            if(checked?.value!==null && checked?.key===candidate.key) {
-              candidate.raw=checked.raw;candidate.value=checked.value;candidate.unitMissing=false;
-              candidate.confidence=checked.confidence;
+            if(candidate.unit==='%'&&!/%\s*$/.test(number.text))continue;
+            const checked=parseStatLines([{text:`${candidate.matchedLabel} ${number.text.trim()}`,confidence:number.confidence}],index)[0];
+            if(!checked||checked.value===null||checked.key!==candidate.key||checked.confidence<70)continue;
+            if(checked.confidence<85 && candidate.value!==null && !candidate.unitMissing && candidate.value!==checked.value) {
+              // A borderline isolated read must not silently replace another
+              // plausible value. Strong isolated reads use the number crop.
+              parsed.push({...candidate,raw:checked.raw,value:checked.value,confidence:checked.confidence});
+            } else {
+              const agreement=!candidate.unitMissing&&candidate.value===checked.value?candidate.confidence:0;
+              candidate.raw=checked.raw;candidate.value=checked.value;candidate.unitMissing=checked.unitMissing;
+              candidate.confidence=Math.max(agreement,checked.confidence);
             }
           }
         }
         for(const c of parsed) c.crop=cropLine(canvas,c.bbox);
         candidates.push(...parsed);
-        onPhoto({index,count:parsed.length,text:data.text??'',error:null,candidates:parsed});
+        onPhoto({index,count:new Set(parsed.map(c=>c.key)).size,text:textResults.join('\n\n'),error:null,candidates:parsed});
         onProgress({index,total:files.length,stage:'사진 확인 완료',progress:1});
       } catch(error) {
         if(signal?.aborted||error.name==='AbortError') throw error;
         // Keep successfully read photos, but release a failed or timed out worker.
         onPhoto({index,count:0,text:'',error:error.message||'이 사진을 읽지 못했어요.'});
         if(canvas) throw error;
-      } finally {if(canvas){canvas.width=1;canvas.height=1;}}
+      } finally {
+        if(recognition&&recognition!==canvas){recognition.width=1;recognition.height=1;}
+        if(canvas){canvas.width=1;canvas.height=1;}
+      }
     }
     return candidates;
   } finally {

@@ -21,7 +21,7 @@ const labels = {
   mainPercent:['주스탯 %','Main Stat %'],
   attackPercent:['공격력 %','ATK %','Attack %'],
   attackSpeed:['공격 속도','공격속도','Attack Speed','ATK Speed'],
-  cooldown:['재사용 대기시간 감소','쿨타임 감소','Cooldown Reduction'],
+  cooldown:['스킬 재사용 대기시간 감소','재사용 대기시간 감소','쿨타임 감소','Cooldown Reduction'],
 };
 const escapeRE = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const aliases = Object.entries(labels).flatMap(([key, names]) => names.map(name => ({
@@ -29,6 +29,10 @@ const aliases = Object.entries(labels).flatMap(([key, names]) => names.map(name 
 }))).sort((a,b) => b.name.length - a.name.length);
 const fields = new Map(FIELDS.map(f => [f[0], f]));
 const units = {조:1e12,억:1e8,만:1e4,천:1e3,k:1e3,m:1e6,b:1e9,t:1e12};
+// Help icons are not part of either the stat label or its number. Only strip
+// known icon tokens at the label boundary; never repair letters inside numbers.
+const separator=/^\s*(?:(?:[ⓘℹ©®@]|\(\s*[iIl1|]\s*\)?|[iIl](?=\s|[:：]))\s*)*[:：]?\s*/u;
+const isHelpToken=text=>/^[ⓘℹ©®@iIlOo01|ㄱ-ㅎㅏ-ㅣ]?$/.test(text.replace(/[():;\[\]{}'"·.：]/g,'').trim());
 
 export function parseStatNumber(raw) {
   let text = String(raw).normalize('NFKC').trim().replace(/\s*%\s*$/, '').replace(/^\+\s*/, '');
@@ -68,11 +72,11 @@ export function parseStatLines(lines, source=0) {
       rest=rest.replace(/^[\s|:：·•]+/, '');
       const alias=aliases.find(a => {
         const m=rest.match(a.re);
-        return m && /^(?:\s*[:：]?\s*[+\d]|\s*$)/.test(rest.slice(m[0].length));
+        return m && /^(?:[+\d]|$)/.test(rest.slice(m[0].length).replace(separator,''));
       });
       if(!alias) break;
       const labelMatch=rest.match(alias.re);
-      const after=rest.slice(labelMatch[0].length).replace(/^\s*[:：]?\s*/, '');
+      const after=rest.slice(labelMatch[0].length).replace(separator, '');
       // Stop at the next label, retaining the full number for strict validation.
       let boundary=after.length;
       for(let i=1;i<after.length;i++) {
@@ -80,6 +84,11 @@ export function parseStatLines(lines, source=0) {
         if(aliases.some(a => a.re.test(after.slice(i)))) {boundary=i;break;}
       }
       const raw=after.slice(0,boundary).replace(/[\s|]+$/, '');
+      // A screenshot may show separate percent and flat-second cooldown rows.
+      // Only the percent reduction belongs to the existing cooldown field.
+      if(alias.key==='cooldown' && /(?:초|seconds?|secs?|s)\s*$/i.test(raw)) {
+        rest=after.slice(boundary);continue;
+      }
       const value=parseStatNumber(raw);
       const [,label,unit,min,max]=fields.get(alias.key);
       const ambiguousCrit=alias.key==='critDamage' && !alias.name.includes('배율');
@@ -155,7 +164,16 @@ export function visualStatLines(data) {
     row.words.push(word);
   }
   return rows.sort((a,b)=>a.center-b.center).map(row=>{
-    const ws=row.words.sort((a,b)=>a.bbox.x0-b.bbox.x0);
+    let ws=row.words.sort((a,b)=>a.bbox.x0-b.bbox.x0);
+    const gaps=ws.slice(1).map((w,i)=>w.bbox.x0-ws[i].bbox.x1);
+    const gap=Math.max(0,...gaps),split=gaps.indexOf(gap)+1;
+    // For a label on the left and a right-aligned value, an icon can be OCR'd
+    // as "1" or "O". Remove such small tokens only on the label side of a
+    // clear column gap; a real numeric 0/1 on the value side is kept.
+    if(gap>row.height*2 && /\d/.test(ws.slice(split).map(w=>w.text).join(' '))) {
+      ws=ws.filter((w,i)=>i>=split || !isHelpToken(w.text) ||
+        w.bbox.x1-w.bbox.x0>(w.bbox.y1-w.bbox.y0)*1.5);
+    }
     return {text:ws.map(w=>w.text).join(' '),words:ws,confidence:Math.min(...ws.map(w=>w.confidence??0)),
       bbox:{x0:Math.min(...ws.map(w=>w.bbox.x0)),y0:Math.min(...ws.map(w=>w.bbox.y0)),
         x1:Math.max(...ws.map(w=>w.bbox.x1)),y1:Math.max(...ws.map(w=>w.bbox.y1))}};
