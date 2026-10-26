@@ -1,4 +1,5 @@
 import {FIELDS, validateStats} from './engine.mjs';
+import {DISPLAY_STAT_FIELDS} from './stat-layout.mjs';
 
 // Match complete labels, longest first. Unknown labels are never guessed.
 const labels = {
@@ -113,7 +114,7 @@ export function parseStatLines(lines, source=0) {
 }
 
 export function mergeStatCandidates(candidates,previousRows=[]) {
-  return FIELDS.flatMap(([key,label,unit]) => {
+  return DISPLAY_STAT_FIELDS.flatMap(([key,label,unit]) => {
     const readings=candidates.filter(c=>c.key===key);
     if(!readings.length) return [];
     const distinct=new Set(readings.filter(r=>r.value!==null).map(r=>`${r.value}:${r.ambiguousCrit}`));

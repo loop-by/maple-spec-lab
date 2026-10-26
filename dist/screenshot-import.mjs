@@ -56,10 +56,10 @@ export function setupScreenshotImport({getProfile,onApply}) {
   }
   function review(previousRows=[]) {
     state.rows=mergeStatCandidates(state.candidates,previousRows);
-    const issues=state.rows.filter(r=>!r.selected),ready=state.rows.filter(r=>r.selected);
+    const issues=state.rows.filter(r=>!r.selected);
     $('#shot-review').innerHTML=state.rows.length?`<div class="shot-review-heading"><h3>${state.rows.length}개 스탯을 찾았어요</h3><p>기존 값과 비교한 뒤 반영하세요. 사진에 없는 항목은 현재 프리셋의 값을 유지합니다. 처음 사용 중이면 예제 수치가 남아 있을 수 있어요.</p><p>사진을 새 기준으로 반영하면 이전 버프 비교 기준을 해제합니다. 버프 변경을 비교할 때 촬영 당시 상태를 다시 지정해 주세요.</p></div>
-      ${issues.length?`<h3 class="shot-group-title">확인이 필요한 항목 ${issues.length}개</h3>${issues.map(rowHTML).join('')}`:''}
-      ${ready.length?`<details class="shot-ready" ${issues.length?'':'open'}><summary>읽힌 항목 ${ready.length}개 · 반영할 값 확인</summary>${ready.map(rowHTML).join('')}</details>`:''}`:
+      <p class="shot-order-note">게임 스탯 창 순서로 표시합니다.${issues.length?` <b>확인이 필요한 ${issues.length}개 항목</b>은 테두리로 표시했어요.`:''}</p>
+      <div class="shot-ordered-rows">${state.rows.map(rowHTML).join('')}</div>`:
       '<div class="shot-empty"><h3>스탯 항목을 찾지 못했어요</h3><p>항목명과 숫자가 함께 보이는 상세 스탯 창을 크게 캡처해 주세요. 장비 옵션이나 전투 화면은 지원하지 않아요.</p><button type="button" id="shot-manual">직접 입력으로 돌아가기</button></div>';
     updateSelection();
   }
