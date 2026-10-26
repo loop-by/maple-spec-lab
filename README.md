@@ -42,6 +42,18 @@ python3 scripts/package-site.py /tmp/maple-spec-lab-site.zip
 
 ZIP 최상위에 `index.html`이 있고, 모든 정적 파일과 `SHA256SUMS`가 포함됩니다. ZIP 생성은 공개 사이트 배포를 실행하지 않습니다. 기존 ChatGPT Sites 프로젝트는 `.openai/hosting.json`에 지정되어 있습니다.
 
+### GitHub Pages 배포
+
+이 프로젝트는 GitHub Pages에서도 `dist/` 전체를 정적 사이트로 배포할 수 있습니다. `.github/workflows/pages.yml`이 테스트와 OCR 파일 무결성 확인을 통과한 뒤 배포합니다.
+
+1. GitHub 저장소의 **Settings → Pages → Build and deployment → Source**를 **GitHub Actions**로 선택합니다.
+2. 스크린샷 기능과 배포 설정이 포함된 `work` 브랜치를 `main`에 병합합니다.
+3. **Actions → Deploy to GitHub Pages** 실행이 완료되면 배포 작업의 `github-pages` 환경 링크에서 사이트를 엽니다. 필요하면 `main`을 선택해 **Run workflow**로 다시 배포할 수 있습니다.
+
+기본 프로젝트 주소는 `https://loop-by.github.io/maple-spec-lab/`입니다. 커스텀 도메인을 설정하면 주소가 달라질 수 있습니다. `main`에 새 커밋을 push하면 자동으로 다시 배포하며, PR에서는 테스트와 파일 확인만 실행합니다. 정적 파일과 OCR 자료는 프로젝트 하위 경로를 기준으로 불러옵니다.
+
+GitHub Pages의 주소는 기존 ChatGPT Sites 주소와 다릅니다. 브라우저 저장 데이터는 주소별로 분리되므로 기존 사이트에서 JSON으로 백업한 뒤 새 주소에서 불러오세요. 저장소가 비공개이면 GitHub 요금제에서 Pages를 지원하는지 확인해야 하며, 이 설정은 저장소 공개 범위를 변경하지 않습니다.
+
 ## 구현한 기능
 
 - 29개 스펙 필드, 보스/일반·기본/스킬·일반/제곱근/세제곱근 콘텐츠 비교
