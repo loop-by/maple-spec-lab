@@ -27,10 +27,16 @@ export const EFFECTS = [
   ['minDamage','최소 데미지 배율 %'], ['maxDamage','최대 데미지 배율 %'],
   ['finalDamage','최종 데미지 % (독립 효과)'], ['penetration','방어 관통력 % (출처별)'],
   ['basic','기본 공격 데미지 %'], ['skill','스킬 데미지 %'], ['statDamage','스탯 비례 데미지 %'],
-  ['attack','표시 공격력 증감'], ['mainPercent','주스탯 % (실측 환산 필요)'],
-  ['attackPercent','공격력 % (실측 환산 필요)'], ['statusDamage','상태이상 데미지 %']
+  ['attack','표시 공격력 증감'], ['mainFlat','주스탯 고정값 (실측 환산 필요)'], ['mainPercent','주스탯 % (실측 환산 필요)'],
+  ['attackPercent','공격력 % (실측 환산 필요)'], ['statusDamage','상태이상 데미지 %'],
+  ...['STR','DEX','INT','LUK'].flatMap(stat=>[[stat.toLowerCase(),`${stat} (고정)`],[stat.toLowerCase()+'Percent',`${stat} %`]]),
+  ['attackSpeed','공격 속도 % (기록)'],['cooldown','재사용 대기시간 감소 % (기록)'],
+  ['hp','최대 HP (기록)'],['hpPercent','최대 HP % (기록)'],['mp','최대 MP (기록)'],['mpPercent','최대 MP % (기록)'],
+  ['defense','방어력 (기록)'],['defensePercent','방어력 % (기록)'],['accuracy','명중 (기록)'],['evade','회피 (기록)'],['itemAttack','장비 공격력 고정값 (기록)']
 ];
-const additive = new Set(EFFECTS.map(([k])=>k).filter(k=>!['none','finalDamage','penetration','mainPercent','attackPercent'].includes(k)));
+const attributeTypes=new Set(['str','dex','int','luk','strPercent','dexPercent','intPercent','lukPercent']);
+const recordTypes=new Set(['attackSpeed','cooldown','hp','hpPercent','mp','mpPercent','defense','defensePercent','accuracy','evade','itemAttack']);
+const additive = new Set(EFFECTS.map(([k])=>k).filter(k=>!['none','finalDamage','penetration','mainFlat','mainPercent','attackPercent'].includes(k)&&!attributeTypes.has(k)&&!recordTypes.has(k)));
 export const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 export function validateStats(s) {
   for(const [key,label,,min,max] of FIELDS) if(!Number.isFinite(s[key]) || s[key]<min || s[key]>max) throw new Error(`${label}: ${min}~${max} 범위의 숫자를 입력하세요.`);
@@ -66,27 +72,49 @@ export function damage(s, mode='average') {
 }
 export function replaceLines(snapshot, oldLines, newLines, calibration={}) {
   const result={...snapshot};
+  let mainDelta=0;
+  for(const line of [...oldLines,...newLines])if(!Number.isFinite(line.value)||line.value<0)throw Error('옵션 수치는 0 이상의 유한수여야 합니다.');
+  // An unchanged raw stat needs no conversion. Cancel matching source lines
+  // without mutating the saved equipment or hiding a genuinely changed stat.
+  const oldRemaining=oldLines.map(l=>({...l})),newRemaining=newLines.map(l=>({...l}));
+  for(let i=oldRemaining.length-1;i>=0;i--){
+    const line=oldRemaining[i];
+    if(!attributeTypes.has(line.type)&&!recordTypes.has(line.type)&&!['mainFlat','mainPercent','attackPercent'].includes(line.type))continue;
+    const match=newRemaining.findIndex(l=>l.type===line.type&&l.value===line.value);
+    if(match>=0){oldRemaining.splice(i,1);newRemaining.splice(match,1);}
+  }
   const accumulate=(lines,sign)=> {
     for(const {type,value} of lines) {
       if(!Number.isFinite(value)||value<0) throw new Error('옵션 수치는 0 이상의 유한수여야 합니다.');
       if(type==='none'||value===0) continue;
+      if(recordTypes.has(type))throw Error(`${EFFECTS.find(([k])=>k===type)?.[1]} 변경은 현재 1회 피해 모델에서 계산하지 않습니다.`);
+      if(attributeTypes.has(type)) {
+        const percent=type.endsWith('Percent'),stat=type.replace('Percent','').toUpperCase();
+        const c=calibration.mainAttribute===stat?calibration[percent?'mainPercent':'mainFlat']:calibration[type];
+        if(!c||!Number.isFinite(c.attack)||!Number.isFinite(c.statDamage))throw Error(calibration.mainAttribute===stat?`${stat}${percent?' %':''}의 실측 환산값을 내 스펙에서 입력하세요.`:`${stat}${percent?' %':''}의 별도 실측 환산이 없어 변경 효율을 계산할 수 없습니다.`);
+        result.attack+=sign*value*c.attack;result.statDamage+=sign*value*c.statDamage;
+        if(!percent&&calibration.mainAttribute===stat)mainDelta+=sign*value;
+        continue;
+      }
       if(additive.has(type)) result[type]+=sign*value;
       else if(type==='finalDamage') result.finalDamage=100*((1+result.finalDamage/100)*Math.pow(1+value/100,sign)-1);
       else if(type==='penetration') {
         if(value>=100&&sign<0) throw new Error('방관 100% 출처는 나머지 출처를 역산할 수 없습니다.');
         if(value>100) throw new Error('출처별 방관은 100% 이하여야 합니다.');
         result.penetration=100*(1-(1-result.penetration/100)*Math.pow(1-value/100,sign));
-      } else if(['mainPercent','attackPercent'].includes(type)) {
+      } else if(['mainFlat','mainPercent','attackPercent'].includes(type)) {
         const c=calibration[type];
-        if(!c||!Number.isFinite(c.attack)||!Number.isFinite(c.statDamage)) throw new Error(`${type==='mainPercent'?'주스탯':'공격력'} %의 실측 환산값을 먼저 입력하세요.`);
+        if(!c||!Number.isFinite(c.attack)||!Number.isFinite(c.statDamage)) throw new Error(`${type==='attackPercent'?'공격력 %':type==='mainPercent'?'주스탯 %':'주스탯 고정값'}의 실측 환산값을 먼저 입력하세요.`);
         result.attack+=sign*value*c.attack; result.statDamage+=sign*value*c.statDamage;
+        if(type==='mainFlat')mainDelta+=sign*value;
       } else throw new Error('지원하지 않는 옵션입니다.');
     }
   };
-  accumulate(oldLines,-1);
+  accumulate(oldRemaining,-1);
   for(const [key] of FIELDS) if(result[key]<0&&result[key]>-1e-8) result[key]=0;
   validateStats(result);
-  accumulate(newLines,1);
+  accumulate(newRemaining,1);
+  if(mainDelta){if(snapshot.mainStat<=0)throw Error('현재 주스탯 수치를 내 스펙에서 먼저 입력하세요.');result.mainStat+=mainDelta;}
   // Permit only numerical roundoff, never silently accept inconsistent snapshots.
   for(const [key] of FIELDS) if(result[key]<0&&result[key]>-1e-8) result[key]=0;
   validateStats(result);

@@ -3,7 +3,7 @@ import {createOcrSession} from './screenshot-worker-client.mjs';
 
 const abortError = () => new DOMException('사진 읽기를 취소했습니다.', 'AbortError');
 
-function bounded(promise, signal, timeout=120000) {
+export function bounded(promise, signal, timeout=120000) {
   return new Promise((resolve,reject) => {
     const abort=()=>finish(reject,abortError());
     const timer=setTimeout(()=>finish(reject,Error('사진을 읽는 데 시간이 오래 걸립니다. 스탯 부분을 크게 캡처해서 다시 선택해 주세요.')),timeout);
@@ -21,7 +21,7 @@ export function checkScreenshotFiles(files) {
   if(files.some(f=>f.size>15*1024*1024)||files.reduce((n,f)=>n+f.size,0)>50*1024*1024) throw Error('사진은 한 장당 15MB, 전체 50MB 이내로 선택해 주세요.');
 }
 
-async function imageCanvas(file,signal) {
+export async function imageCanvas(file,signal) {
   const url=URL.createObjectURL(file), img=new Image();
   try {
     img.src=url;

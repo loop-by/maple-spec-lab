@@ -21,7 +21,9 @@ def main():
             if actual != expected:
                 raise SystemExit(f'OCR asset integrity mismatch: {name}')
     for name in ['index.html', 'app.mjs', 'screenshot-import.mjs', 'screenshot-ocr.mjs',
-                 'screenshot-worker-client.mjs', 'ocr-session-worker.mjs']:
+                 'screenshot-worker-client.mjs', 'ocr-session-worker.mjs', 'stat-layout.mjs',
+                 'equipment-data.mjs', 'equipment-parser.mjs', 'equipment-ocr.mjs',
+                 'equipment-import.mjs', 'equipment-view.mjs', 'equipment.css']:
         if not (ROOT / name).is_file():
             raise SystemExit(f'Missing site entry: {name}')
     files = sorted(path for path in ROOT.rglob('*') if path.is_file())
