@@ -1,5 +1,6 @@
-import {compare,damage,replaceLines,EFFECTS} from './engine.mjs';
-import {equipmentLine} from './equipment-parser.mjs';
+import {compare,damage,replaceLines,EFFECTS} from './engine.mjs?v=0.3.1';
+import {equipmentLine} from './equipment-parser.mjs?v=0.3.1';
+import {itemAtSlot} from './equipment-starforce.mjs?v=0.3.1';
 
 const neutral=new Set(['hp','hpPercent','mp','mpPercent','defense','defensePercent','accuracy','evade','attackSpeed','cooldown']);
 const attributes=new Set(['str','dex','int','luk','strPercent','dexPercent','intPercent','lukPercent','mainFlat','mainPercent','attackPercent']);
@@ -44,22 +45,26 @@ function prepare(oldLines,newLines,calibration) {
   }
   return {old,next,issues,excluded:[...excluded]};
 }
-export function compareItems(snapshot,current,candidate,calibration={}) {
-  const differences=itemDifferences(current,candidate);
+export function compareItems(snapshot,current,candidate,calibration={},slot=null) {
+  let differences=itemDifferences(current,candidate);
   try{
     if([current,candidate].some(item=>item&&!item.effects?.length))throw Error('장비의 주·부 옵션을 먼저 등록하세요.');
-    const prepared=prepare(itemLines(current),itemLines(candidate),calibration);
+    const before=itemAtSlot(current,slot),after=itemAtSlot(candidate,slot);
+    if(before.error||after.error)throw Error(before.error??after.error);
+    differences=itemDifferences(before.item,after.item);
+    const prepared=prepare(itemLines(before.item),itemLines(after.item),calibration);
     if(prepared.issues.length)return {error:prepared.issues.join(' · '),issues:prepared.issues,differences,excluded:prepared.excluded};
     const result=compare(snapshot,prepared.old,prepared.next,calibration);
-    return {...result,differences,excluded:prepared.excluded};
+    return {...result,differences,excluded:prepared.excluded,estimated:before.estimated||after.estimated};
   }catch(error){return {error:error.message,differences,excluded:[]};}
 }
-export function itemContribution(snapshot,item,calibration={}) {
-  const removed=compareItems(snapshot,item,null,calibration);
+export function itemContribution(snapshot,item,calibration={},slot=null) {
+  const removed=compareItems(snapshot,item,null,calibration,slot);
   return removed.error?removed:{...removed,share:(1-removed.after/removed.before)*100};
 }
 export function slotContribution(snapshot,slot,calibration={},layer='all') {
   try{
+    if(slot.needsStatsReview)throw Error('슬롯 강화 변경 후 현재 스펙 확인이 필요합니다.');
     const lines=layer==='all'?[...slot.miracle.old,...slot.additional.old]:slot[layer].old;
     const prepared=prepare(lines,[],calibration);
     if(prepared.issues.length)return {error:prepared.issues.join(' · ')};

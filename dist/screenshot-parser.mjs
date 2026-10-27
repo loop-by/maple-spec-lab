@@ -1,4 +1,4 @@
-import {FIELDS, validateStats} from './engine.mjs';
+import {FIELDS, validateStats} from './engine.mjs?v=0.3.1';
 import {DISPLAY_STAT_FIELDS} from './stat-layout.mjs';
 
 // Match complete labels, longest first. Unknown labels are never guessed.

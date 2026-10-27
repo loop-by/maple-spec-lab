@@ -1,5 +1,5 @@
 import {parseStatNumber} from './screenshot-parser.mjs';
-import {slotKey} from './equipment-data.mjs';
+import {slotKey} from './equipment-data.mjs?v=0.3.1';
 
 const aliases={
   attack:['공격력','attack','atk'],hp:['최대HP','HP','maxhp'],mp:['최대MP','MP','maxmp'],defense:['방어력','defense'],

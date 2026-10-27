@@ -1,7 +1,7 @@
 import {bounded,imageCanvas} from './screenshot-ocr.mjs';
 import {createOcrSession} from './screenshot-worker-client.mjs';
 import {visualStatLines,parseStatNumber} from './screenshot-parser.mjs';
-import {equipmentLine,parseEquipment} from './equipment-parser.mjs';
+import {equipmentLine,parseEquipment} from './equipment-parser.mjs?v=0.3.1';
 import {identifyEquipmentName,equipmentStars} from './equipment-identification.mjs';
 
 export function checkEquipmentFiles(files) {
@@ -154,7 +154,8 @@ export async function readEquipmentScreenshots(files,{signal,mode='combined',kno
         let grade='';
         if(panels[1]){const gradeCanvas=contrast(crop(panels[1],[735,410,295,130]),85);try{grade=(await recognize(gradeCanvas,'kor','7')).text.trim();}finally{gradeCanvas.width=1;gradeCanvas.height=1;}}
         const record=parseEquipment(readings[0],readings[1]??[],{title,grade,metadata});
-        record.item.stars=stars;
+        record.slotUpgrades={stars,importStars:stars!==null};
+        record.item.observation={basis:'applied',stars};
         if(mode==='inventory'){
           const icon=crop(panels[0],[36,330,250,250],80);
           try{record.item.icon=icon.toDataURL('image/webp',.7);}finally{icon.width=1;icon.height=1;}

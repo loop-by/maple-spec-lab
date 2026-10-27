@@ -1,4 +1,4 @@
-import {FIELDS} from './engine.mjs';
+import {FIELDS} from './engine.mjs?v=0.3.1';
 
 // Relative order of supported fields in the supplied in-game stat screens.
 export const GAME_STAT_KEYS = [

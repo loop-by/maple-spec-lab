@@ -24,7 +24,7 @@ def main():
                  'screenshot-worker-client.mjs', 'ocr-session-worker.mjs', 'stat-layout.mjs',
                  'equipment-data.mjs', 'equipment-parser.mjs', 'equipment-ocr.mjs',
                  'equipment-import.mjs', 'equipment-view.mjs', 'equipment-identification.mjs', 'equipment-starforce.mjs', 'equipment.css',
-                 'inventory-data.mjs', 'inventory-engine.mjs', 'inventory-view.mjs', 'inventory.css']:
+                 'inventory-data.mjs', 'inventory-engine.mjs', 'inventory-view.mjs', 'inventory.css', 'equipment-options.mjs']:
         if not (ROOT / name).is_file():
             raise SystemExit(f'Missing site entry: {name}')
     files = sorted(path for path in ROOT.rglob('*') if path.is_file())

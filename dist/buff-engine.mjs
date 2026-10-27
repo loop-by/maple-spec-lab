@@ -1,5 +1,5 @@
 import {JOBS, SHARED, catalogRank} from './catalog.mjs';
-import {EFFECTS, replaceLines, validateStats} from './engine.mjs';
+import {EFFECTS, replaceLines, validateStats} from './engine.mjs?v=0.3.1';
 
 const types = new Set(EFFECTS.map(([type])=>type));
 const jobKey = value => String(value??'').replace(/\s/g,'').toLowerCase();

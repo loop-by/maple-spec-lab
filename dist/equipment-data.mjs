@@ -1,4 +1,4 @@
-import {EFFECTS} from './engine.mjs';
+import {EFFECTS} from './engine.mjs?v=0.3.1';
 
 export const ITEM_EFFECT_GROUPS=[['base','주 옵션'],['random','부 옵션'],['unclassified','분류 확인 필요']];
 const itemEffectTypes=new Set([...EFFECTS.map(([key])=>key),'unread',...Array.from({length:5},(_,i)=>`skillLevel${i+1}`)]);
@@ -31,7 +31,7 @@ export const emptyLayer=()=>({old:Array.from({length:3},()=>({type:'none',value:
 export function newEquipment(key) {
   const slot=EQUIPMENT_SLOTS.find(x=>x.key===key);
   if(!slot)throw Error('장비 부위를 선택하세요.');
-  return {name:slot.name,slotKey:key,miracle:emptyLayer(),additional:emptyLayer()};
+  return {name:slot.name,slotKey:key,stars:null,scrolls:{attack:null,amplification:null},miracle:emptyLayer(),additional:emptyLayer()};
 }
 export function findEquipmentIndex(profile,key) {
   return profile.equipment.findIndex(s=>(s.slotKey??slotKey(s.name))===key);
@@ -41,6 +41,10 @@ export function validateEquipmentItem(item) {
   for(const key of ['rarity','quality'])if(typeof item[key]!=='string'||item[key].length>30)throw Error('장비 등급을 확인하세요.');
   if(item.level!==null&&(!Number.isInteger(item.level)||item.level<0||item.level>10000))throw Error('장비 레벨을 확인하세요.');
   if(item.stars!==undefined&&item.stars!==null&&(!Number.isInteger(item.stars)||item.stars<0||item.stars>30))throw Error('장비의 별 강화는 0~30 사이의 정수로 입력하세요.');
+  if(item.observation!==undefined){
+    const o=item.observation;
+    if(!o||!['base','applied'].includes(o.basis)||(o.stars!==null&&(!Number.isInteger(o.stars)||o.stars<0||o.stars>30)))throw Error('장비 수치의 촬영 당시 슬롯 강화 기준을 확인하세요.');
+  }
   if(item.nameVerified!==undefined&&typeof item.nameVerified!=='boolean')throw Error('장비 이름 확인 상태를 확인하세요.');
   if(item.icon!==undefined&&(typeof item.icon!=='string'||item.icon.length>40000||!/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/.test(item.icon)))throw Error('장비 아이콘 형식을 확인하세요.');
   if(!Array.isArray(item.effects)||item.effects.length>30)throw Error('장착 효과는 최대 30개입니다.');

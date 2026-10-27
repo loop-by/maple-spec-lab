@@ -1,5 +1,5 @@
 import {JOBS,SHARED,SOURCES,CATALOG_DATE,COVERAGE} from './catalog.mjs';
-import {EFFECTS,damage} from './engine.mjs';
+import {EFFECTS,damage} from './engine.mjs?v=0.3.1';
 import {jobOf,entriesFor,selection,eligibility,isLearned,rankFor,resolveLoadout} from './buff-engine.mjs';
 
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
